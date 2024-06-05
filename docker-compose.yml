@@ -1,0 +1,5 @@
+services:
+  ai-maestro-proxy:
+    image: ghcr.io/jemeyer/ai-maestro-proxy:latest
+    ports:
+      - '11434:11434'
