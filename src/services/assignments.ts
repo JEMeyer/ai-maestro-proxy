@@ -5,8 +5,10 @@ interface ModelAssignment {
   port: number;
   ip_addr: string;
   gpu_ids: string;
+  weight: number;
 }
 
+// Returns all assignmets for a given model name, ordered by the average gpu weight for that assignment - highest first
 export async function getModelAssignments(
   modelName: string
 ): Promise<ModelAssignment[]> {
@@ -24,7 +26,8 @@ export async function getModelAssignments(
       a.name,
       a.port,
       c.ip_addr,
-      GROUP_CONCAT(DISTINCT g.id) AS gpu_ids
+      GROUP_CONCAT(DISTINCT g.id) AS gpu_ids,
+      AVG(g.weight) AS avg_gpu_weight
     FROM
       assignments a
       JOIN assignment_gpus ag ON a.id = ag.assignment_id
@@ -33,7 +36,9 @@ export async function getModelAssignments(
     WHERE
       a.model_name = ?
     GROUP BY
-      a.id, a.name, a.port, c.ip_addr;
+      a.id, a.name, a.port, c.ip_addr
+    ORDER BY
+      avg_gpu_weight DESC;
   `;
 
   const [rows] = await pool.execute(query, [modelName]);
