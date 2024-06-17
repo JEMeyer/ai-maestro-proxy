@@ -2,17 +2,18 @@
   "name": "ai-maestro-proxy",
   "version": "1.0.0",
   "description": "Proxy server to route API calls to AI models in docker containers",
-  "main": "main.js",
+  "main": "proxy.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/main.js",
-    "dev": "tsc --watch & node dist/main.js",
+    "start": "node dist/proxy.js",
+    "dev": "tsc --watch & node dist/proxy.js",
     "lint": "eslint --fix \"src/**/*.ts\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Joe Meyer",
   "dependencies": {
     "async-mutex": "^0.5.0",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "http-proxy-middleware": "^3.0.0",
     "mariadb": "^3.3.0",

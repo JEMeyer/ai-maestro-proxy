@@ -41,7 +41,7 @@ export async function getModelAssignments(
       avg_gpu_weight DESC;
   `;
 
-  const [rows] = await pool.execute(query, [modelName]);
+  const rows = await pool.execute(query, [modelName]);
 
   // Cache the result in Redis with an expiration time
   await redisClient.set(cacheKey, JSON.stringify(rows), {
