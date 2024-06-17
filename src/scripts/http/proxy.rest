@@ -1,0 +1,29 @@
+### Generate an image with sdxl
+POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
+Content-Type: application/json
+
+{
+  "model": "sdxl-turbo",
+  "prompt": "A photo of a cat in a hat, digital art"
+}
+
+### Generate an image with sd
+POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
+Content-Type: application/json
+
+{
+  "model": "sd-turbo",
+  "prompt": "A photo of a cat in a hat, digital art"
+}
+
+### Chat request
+POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
+Content-Type: application/json
+
+{
+  "model": "codestral",
+  "prompt": "A photo of a cat in a hat, digital art"
+}
+
+### Clear the Redis cache
+DELETE {{baseProxyUrl}}:{{proxyPort}}/cache
