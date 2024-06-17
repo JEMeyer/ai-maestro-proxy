@@ -16,13 +16,42 @@ Content-Type: application/json
   "prompt": "A photo of a cat in a hat, digital art"
 }
 
-### Chat request
+### Chat request, no stream
 POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
 Content-Type: application/json
 
 {
   "model": "codestral",
-  "prompt": "A photo of a cat in a hat, digital art"
+  "prompt": "Why is the sky blue?",
+  "stream": false
+}
+
+### Generate request, no stream
+POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+Content-Type: application/json
+
+{
+  "model": "codestral",
+  "prompt": "Why is the sky blue?",
+  "stream": false
+}
+
+### Chat request, streaming
+POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
+Content-Type: application/json
+
+{
+  "model": "codestral",
+  "prompt": "Why is the sky blue?"
+}
+
+### Generate request, streaming
+POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+Content-Type: application/json
+
+{
+  "model": "codestral",
+  "prompt": "Why is the sky blue?"
 }
 
 ### Clear the Redis cache
