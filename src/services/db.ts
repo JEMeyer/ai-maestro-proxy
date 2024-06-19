@@ -8,8 +8,8 @@ export const pool: Pool = createPool({
   database: process.env.SQL_DB,
 });
 
-// 1 year... sorry not sorry
-export const CACHE_EXPIRATION_TIME_SECONDS = 24 * 60 * 60 * 365;
+// 1 day until it needs to hit the db again
+export const CACHE_EXPIRATION_TIME_SECONDS = 24 * 60 * 60;
 
 let redisClient: RedisClientType;
 
