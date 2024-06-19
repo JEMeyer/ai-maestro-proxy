@@ -26,8 +26,8 @@ Content-Type: application/json
   "stream": false
 }
 
-### Generate request, no stream
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+### Generate completion, no stream
+POST {{baseProxyUrl}}:{{proxyPort}}/api/completions
 Content-Type: application/json
 
 {
@@ -46,7 +46,7 @@ Content-Type: application/json
 }
 
 ### Generate request, streaming
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+POST {{baseProxyUrl}}:{{proxyPort}}/api/completions
 Content-Type: application/json
 
 {
@@ -56,7 +56,7 @@ Content-Type: application/json
 
 
 ### Generate request, JSON
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+POST {{baseProxyUrl}}:{{proxyPort}}/api/completions
 Content-Type: application/json
 
 {
