@@ -1,12 +1,17 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import express from 'express';
-import { createProxyMiddleware, Options } from 'http-proxy-middleware';
+import express, { Request, Response, NextFunction } from 'express';
+import {
+  createProxyMiddleware,
+  Options,
+  responseInterceptor,
+} from 'http-proxy-middleware';
 import { Compute } from './utilities/computeStatus';
-import { IncomingMessage, ServerResponse } from 'http';
+import { IncomingMessage } from 'http';
 import { reserveGPU } from './utilities/configuration';
 import { initializeRedis } from './services/db';
 import { GpuStatusMutex } from './utilities/mutex';
+import { v4 as uuidv4 } from 'uuid';
 import { deleteModelAssignmentCache } from './services/assignments';
 
 const app = express();
@@ -14,12 +19,20 @@ const app = express();
 // Middleware to parse JSON bodies
 app.use(express.json());
 
-const modelRouter = async (req: IncomingMessage) => {
-  const expressReq = req as express.Request & {
-    gpuIds: string[];
-  };
+// Middleware to add a unique ID to each request
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const requestId = uuidv4();
+  req.headers['x-request-id'] = requestId;
+  next();
+});
+
+const modelRouter = async (
+  req: IncomingMessage
+): Promise<string | undefined> => {
+  const expressReq = req as express.Request;
   const modelName = expressReq.body.model;
-  const result = await reserveGPU(modelName);
+  const requestId = expressReq.headers['x-request-id'] as string;
+  const result = await reserveGPU(modelName, requestId);
 
   if (result instanceof Error) return undefined;
 
@@ -29,34 +42,31 @@ const modelRouter = async (req: IncomingMessage) => {
       return modelRouter(req);
     }, 300);
   } else {
-    // Attach the GPU IDs to the request object
-    expressReq.gpuIds = result.gpuIds;
-
     return `${result.serverUrl}${expressReq.originalUrl}`;
   }
 };
 
-const handleResponse = async (
-  proxyRes: IncomingMessage,
-  req: IncomingMessage & { gpuIds: string[] },
-  res: ServerResponse
-) => {
+const handleResponse = async (responseBuffer: any, proxyRes: any) => {
   const release = await GpuStatusMutex.acquire();
   try {
-    // Retrieve the GPU IDs from the request object
-    const gpuIds = req.gpuIds;
+    const symbols = Object.getOwnPropertySymbols(proxyRes.req);
+    const kOutHeadersSymbol = symbols.find(
+      (sym) => sym.toString() === 'Symbol(kOutHeaders)'
+    );
 
-    // Now that the request is done, we can free up the GPUs
-    await Compute.markAvailable(gpuIds);
+    if (kOutHeadersSymbol != null) {
+      const requestId = proxyRes.req[kOutHeadersSymbol]['x-request-id'][1];
+      if (requestId) {
+        await Compute.markAvailable(requestId);
+      } else {
+        console.error('Request does not have ID in response handler');
+      }
+    } else {
+      console.error("Symbol 'kOutHeaders' not found on proxyRes.req");
+    }
 
-    // Pipe the response to the client
-    proxyRes.pipe(res);
-
-    // Listen for the 'end' event to mark the compute resources as available
-    proxyRes.on('end', async () => {
-      // Now that the request is done, we can free up the GPUs
-      await Compute.markAvailable(gpuIds);
-    });
+    // Return the original response buffer
+    return responseBuffer;
   } finally {
     release();
   }
@@ -67,12 +77,7 @@ const diffusionProxyOptions: Options = {
   router: modelRouter,
   selfHandleResponse: true,
   on: {
-    proxyRes: (proxyRes, req, res) =>
-      handleResponse(
-        proxyRes,
-        req as IncomingMessage & { gpuIds: string[] },
-        res
-      ),
+    proxyRes: responseInterceptor(handleResponse),
   },
 };
 
@@ -90,12 +95,7 @@ const ollamaProxyOptions: Options = {
       proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyString));
       proxyReq.write(bodyString);
     },
-    proxyRes: (proxyRes, req, res) =>
-      handleResponse(
-        proxyRes,
-        req as IncomingMessage & { gpuIds: string[] },
-        res
-      ),
+    proxyRes: responseInterceptor(handleResponse),
   },
 };
 

@@ -10,8 +10,11 @@ import { GpuStatusMutex } from './mutex';
  * @returns {string | undefined} - The address of the reserved server if available; otherwise, undefined.
  */
 export const reserveGPU = async (
-  modelName: string
+  modelName: string,
+  requestId: string | undefined
 ): Promise<{ serverUrl: string; gpuIds: string[] } | undefined> => {
+  if (requestId === undefined) return undefined;
+
   const release = await GpuStatusMutex.acquire();
   try {
     // Get model gpuIds we can use
@@ -23,7 +26,7 @@ export const reserveGPU = async (
       const isBusy = await Compute.isBusy(gpuIds);
 
       if (!isBusy) {
-        Compute.markBusy(gpuIds);
+        Compute.markBusy(gpuIds, requestId);
         return {
           serverUrl: `http://${assignment.ip_addr}:${assignment.port}`,
           gpuIds,
