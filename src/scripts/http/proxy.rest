@@ -17,17 +17,27 @@ Content-Type: application/json
 }
 
 ### Chat request, no stream
-POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
+POST http://192.168.1.32:{{proxyPort}}/api/chat
 Content-Type: application/json
 
 {
   "model": "codestral",
-  "prompt": "Why is the sky blue?",
+  "prompt": "Why is the sky blue and not green?",
   "stream": false
 }
 
-### Generate completion, no stream
-POST {{baseProxyUrl}}:{{proxyPort}}/api/completions
+### direct to computer
+POST http://192.168.1.32:{{proxyPort}}/api/generate
+Content-Type: application/json
+
+{
+  "model": "codestral",
+  "prompt": "Why is the sky blue and not green?",
+  "stream": true
+}
+
+### Generate generate, no stream
+POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
 Content-Type: application/json
 
 {
@@ -46,7 +56,7 @@ Content-Type: application/json
 }
 
 ### Generate request, streaming
-POST {{baseProxyUrl}}:{{proxyPort}}/api/completions
+POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
 Content-Type: application/json
 
 {
@@ -56,7 +66,7 @@ Content-Type: application/json
 
 
 ### Generate request, JSON
-POST {{baseProxyUrl}}:{{proxyPort}}/api/completions
+POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
 Content-Type: application/json
 
 {

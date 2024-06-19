@@ -14,6 +14,7 @@ import { initializeRedis } from './services/db';
 import { GpuStatusMutex } from './utilities/mutex';
 import { v4 as uuidv4 } from 'uuid';
 import { deleteModelAssignmentCache } from './services/assignments';
+import axios from 'axios';
 
 const app = express();
 
@@ -30,14 +31,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Middleware to modify (ollama) request headers to keep models loaded
-app.use('/api/*', (req: Request, res: Response, next: NextFunction) => {
-  if (req.body) {
-    req.body['keep_alive'] = -1;
-  }
-  next();
-});
-
 const modelRouter = async (
   req: IncomingMessage
 ): Promise<string | undefined> => {
@@ -47,6 +40,11 @@ const modelRouter = async (
   const result = await reserveGPU(modelName, requestId);
 
   if (result instanceof Error) return undefined;
+
+  console.log(
+    '[PROXY]',
+    `Forwarding to ${result?.serverUrl}${expressReq.originalUrl}`
+  );
 
   if (result === undefined) {
     // If no available server is found, wait for a short interval and retry
@@ -93,27 +91,17 @@ const diffusionProxyOptions: Options = {
   },
 };
 
-const ollamaProxyOptions: Options = {
-  changeOrigin: true,
-  router: modelRouter,
-  selfHandleResponse: true, // Required for responseInterceptor to work
-  on: {
-    proxyRes: responseInterceptor(handleResponse),
-  },
-};
-
 // Create the proxy middleware
-const ollamaProxy = createProxyMiddleware(ollamaProxyOptions);
 const diffusionProxy = createProxyMiddleware(diffusionProxyOptions);
-
-// Apply the proxy middleware to the specific endpoints
-app.use('/api/completions', ollamaProxy);
-app.use('/api/chat', ollamaProxy);
-app.use('/api/embeddings', ollamaProxy);
 
 // Note, we'll use the same port for the diffusion to consolidate apps for proxy
 app.use('/txt2img', diffusionProxy);
 app.use('/img2img', diffusionProxy);
+
+// Unfortunately ollama proxy made me wanna minecraft myself so we just call on the users behalf
+app.use('/api/generate', handleOllamaRequest);
+app.use('/api/chat', handleOllamaRequest);
+app.use('/api/embeddings', handleOllamaRequest);
 
 // Used to wipe out the Redis cache in case of bad data - will then re-request from the database
 app.delete('/cache', async (req, res) => {
@@ -124,6 +112,51 @@ app.delete('/cache', async (req, res) => {
     res.status(500).send({ error: 'Failed to clear cache' });
   }
 });
+
+async function handleOllamaRequest(req: Request, res: Response) {
+  try {
+    const stream = req.body.stream as boolean;
+    const requestId = req.headers['x-request-id'] as string;
+
+    const result = await reserveGPU(req.body.model, requestId);
+    if (result instanceof Error) {
+      res.status(500).send('Error reserving GPU');
+      return;
+    }
+
+    if (result == null) return;
+
+    // promise chain the ollama call. Avoid await so we can service other calls
+    axios({
+      method: req.method,
+      url: `${result.serverUrl}${req.originalUrl}`,
+      data: { ...req.body, keep_alive: -1 },
+      responseType: stream ? 'stream' : 'json',
+    })
+      .then((response) => {
+        if (stream) {
+          response.data.on('data', (chunk: Buffer) => {
+            res.write(chunk);
+          });
+
+          response.data.on('end', () => {
+            res.end();
+            Compute.markAvailable(requestId);
+          });
+        } else {
+          res.status(response.status).json(response.data);
+          Compute.markAvailable(requestId);
+        }
+      })
+      .catch((error) => {
+        console.error('Error proxying Ollama request:', error);
+        res.status(500).send('Error proxying Ollama request');
+      });
+  } catch (error) {
+    console.error('Error proxying Ollama request:', error);
+    res.status(500).send('Error proxying Ollama request');
+  }
+}
 
 // Start the server
 const port = 11434;
