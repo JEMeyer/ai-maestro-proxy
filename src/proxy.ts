@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import express, { Request, Response, NextFunction } from 'express';
+import morgan from 'morgan';
 import {
   createProxyMiddleware,
   Options,
@@ -18,6 +19,9 @@ const app = express();
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Logging middleware
+app.use(morgan('dev'));
 
 // Middleware to add a unique ID to each request
 app.use((req: Request, res: Response, next: NextFunction) => {
