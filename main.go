@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,10 +18,9 @@ import (
 )
 
 type RequestBody struct {
-	Model string `json:"model"`
-	// KeepAlive and Stream are ollama-only fields
-	KeepAlive *int    `json:"keep_alive,omitempty"`
-	Stream    *bool   `json:"stream,omitempty"`
+	Model     string                 `json:"model"`
+	KeepAlive *int                   `json:"keep_alive,omitempty"`
+	Stream    *bool                  `json:"stream,omitempty"`
 	Extras    map[string]interface{} `json:"-"`
 }
 
@@ -51,15 +51,14 @@ func (r *RequestBody) UnmarshalJSON(data []byte) error {
 }
 
 func main() {
+	// Initialize database and Redis connections
 	db.InitDB()
 	db.InitRedis()
 
 	r := mux.NewRouter()
-
 	r.Use(loggingMiddleware)
 	r.Use(requestIDMiddleware)
 
-	// Consolidated handler for all routes
 	r.HandleFunc("/txt2img", consolidatedHandler).Methods("POST")
 	r.HandleFunc("/img2img", consolidatedHandler).Methods("POST")
 	r.HandleFunc("/api/generate", consolidatedHandler).Methods("POST")
@@ -68,7 +67,6 @@ func main() {
 	r.HandleFunc("/cache", clearCacheHandler).Methods("DELETE")
 
 	port := "8080"
-
 	log.Printf("Load balancer server is running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
@@ -89,155 +87,159 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 }
 
 func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
-    log.Println("Received request:", r.Method, r.URL.Path)
+	log.Println("Received request:", r.Method, r.URL.Path)
 
-    // Ensure Content-Type is application/json
-    if r.Header.Get("Content-Type") != "application/json" {
-        log.Println("Invalid Content-Type:", r.Header.Get("Content-Type"))
-        http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
-        return
-    }
+	if r.Header.Get("Content-Type") != "application/json" {
+		log.Println("Invalid Content-Type:", r.Header.Get("Content-Type"))
+		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
 
-    var reqBody RequestBody
-    err := json.NewDecoder(r.Body).Decode(&reqBody)
-    if err != nil {
-        log.Printf("Error decoding request body: %v", err)
-        http.Error(w, "Invalid request body", http.StatusBadRequest)
-        return
-    }
+	var reqBody RequestBody
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		log.Printf("Error decoding request body: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
-    log.Printf("Request body: %+v", reqBody)
-    log.Printf("Extra fields: %+v", reqBody.Extras)
+	modelName := reqBody.Model
+	requestID := r.Header.Get("X-Request-ID")
 
-    modelName := reqBody.Model
-    requestID := r.Header.Get("X-Request-ID")
+	// Merge known fields with extra fields
+	mergedBody := make(map[string]interface{})
+	mergedBody["model"] = reqBody.Model
+	if reqBody.KeepAlive != nil {
+		mergedBody["keep_alive"] = *reqBody.KeepAlive
+	}
+	if reqBody.Stream != nil {
+		mergedBody["stream"] = *reqBody.Stream
+	}
+	for k, v := range reqBody.Extras {
+		mergedBody[k] = v
+	}
 
-    // Merge known fields with extra fields
-    mergedBody := make(map[string]interface{})
-    mergedBody["model"] = reqBody.Model
-    if reqBody.KeepAlive != nil {
-        mergedBody["keep_alive"] = *reqBody.KeepAlive
-    }
-    if reqBody.Stream != nil {
-        mergedBody["stream"] = *reqBody.Stream
-    }
-    for k, v := range reqBody.Extras {
-        mergedBody[k] = v
-    }
+	bodyBytes, err := json.Marshal(mergedBody)
+	if err != nil {
+		log.Printf("Error marshaling merged body: %v", err)
+		http.Error(w, "Error processing request", http.StatusInternalServerError)
+		return
+	}
 
-    // Marshal the merged body to JSON
-    bodyBytes, err := json.Marshal(mergedBody)
-    if err != nil {
-        log.Printf("Error marshaling merged body: %v", err)
-        http.Error(w, "Error processing request", http.StatusInternalServerError)
-        return
-    }
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	r.ContentLength = int64(len(bodyBytes))
 
-    // Update the request body with the merged JSON
-    r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-    r.ContentLength = int64(len(bodyBytes))
+	// Cancel this request after 20 seconds
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
 
-    result, done, err := services.ReserveGPU(modelName, requestID)
-    if err != nil {
-        log.Printf("Error reserving GPU: %v", err)
-        http.Error(w, err.Error(), http.StatusInternalServerError)
-        return
-    }
+	result, gpus, done, err := services.ReserveGPU(modelName, requestID)
+	if err != nil {
+		log.Printf("Error reserving GPU: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-    if result == nil {
-        select {
-        case <-done:
-            // GPU became available, use the result directly
-            result, err = services.GetReservedGPU(modelName, requestID)
-            if err != nil {
-                log.Printf("Error getting reserved GPU: %v", err)
-                http.Error(w, err.Error(), http.StatusInternalServerError)
-                return
-            }
-        case <-time.After(30 * time.Second):
-            // Timeout waiting for GPU
-            log.Println("Timeout waiting for GPU")
-            http.Error(w, "Timeout waiting for GPU", http.StatusGatewayTimeout)
-            return
-        }
-    }
+	go func() {
+		select {
+		case <-done:
+			result, gpus, err = services.GetReservedGPU(modelName, requestID)
+			log.Printf("Reserved GPU(s) %v", err)
+			if err != nil {
+				log.Printf("Error getting reserved GPU: %v", err)
+			}
+		case <-ctx.Done():
+			log.Println("Timeout waiting for GPU")
+		}
+	}()
 
-    proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
-    log.Println("Proxying request to:", proxyURL)
+	// Cleanup function we defer to make sure we don't get gpus stuck in busy state
+	defer func() {
+		services.Compute.MarkAvailable(requestID)
+		log.Println("Marked GPU as available for request ID:", requestID)
+	}()
 
-    if reqBody.Stream != nil && *reqBody.Stream {
-        // Handle streaming response
-        resp, err := http.Post(proxyURL, "application/json", r.Body)
-        if err != nil {
-            log.Printf("Error proxying request: %v", err)
-            http.Error(w, "Error proxying request", http.StatusInternalServerError)
-            return
-        }
-        defer resp.Body.Close()
+	if result == nil {
+		select {
+		case <-done:
+			result, gpus, err = services.GetReservedGPU(modelName, requestID)
+			if err != nil {
+				log.Printf("Error getting reserved GPU: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		case <-ctx.Done():
+			log.Println("Timeout waiting for GPU")
+			http.Error(w, "Timeout waiting for GPU", http.StatusGatewayTimeout)
+			return
+		}
+	}
 
-        w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-        w.WriteHeader(resp.StatusCode)
+	proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
+	log.Println("Proxying request to:", proxyURL)
 
-        flusher, ok := w.(http.Flusher)
-        if !ok {
-            log.Println("Streaming not supported")
-            http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-            return
-        }
+	if reqBody.Stream != nil && *reqBody.Stream {
+		resp, err := http.Post(proxyURL, "application/json", r.Body)
+		if err != nil {
+			log.Printf("Error proxying request: %v", err)
+			http.Error(w, "Error proxying request", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
 
-        // Create a buffer to read and write chunks of the response body
-        buf := make([]byte, 4096)
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
 
-        for {
-            n, err := resp.Body.Read(buf)
-            if err != nil && err != io.EOF {
-                log.Printf("Error reading response: %v", err)
-                http.Error(w, "Error streaming response", http.StatusInternalServerError)
-                break
-            } else if n == 0 {
-                // The connection has been closed
-                break
-            }
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			log.Println("Streaming not supported")
+			http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+			return
+		}
 
-            _, err = w.Write(buf[:n])
-            if err != nil {
-                log.Printf("Error writing to response: %v", err)
-                http.Error(w, "Error streaming response", http.StatusInternalServerError)
-                break
-            }
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			if err != nil && err != io.EOF {
+				log.Printf("Error reading response: %v", err)
+				http.Error(w, "Error streaming response", http.StatusInternalServerError)
+				break
+			} else if n == 0 {
+				break
+			}
 
-            flusher.Flush()
-        }
-    } else {
-        // Handle non-streaming response
-        resp, err := http.Post(proxyURL, "application/json", r.Body)
-        if err != nil {
-            log.Printf("Error proxying request: %v", err)
-            http.Error(w, "Error proxying request", http.StatusInternalServerError)
-            return
-        }
-        defer resp.Body.Close()
+			_, err = w.Write(buf[:n])
+			if err != nil {
+				log.Printf("Error writing to response: %v", err)
+				http.Error(w, "Error streaming response", http.StatusInternalServerError)
+				break
+			}
 
-        // Read the response body
-        body, err := io.ReadAll(resp.Body)
-        if err != nil {
-            log.Printf("Error reading response body: %v", err)
-            http.Error(w, "Error reading response body", http.StatusInternalServerError)
-            return
-        }
+			flusher.Flush()
+		}
+	} else {
+		resp, err := http.Post(proxyURL, "application/json", r.Body)
+		if err != nil {
+			log.Printf("Error proxying request: %v", err)
+			http.Error(w, "Error proxying request", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
 
-        // Write the response status code and body
-        w.WriteHeader(resp.StatusCode)
-        _, err = w.Write(body)
-        if err != nil {
-            log.Printf("Error writing response: %v", err)
-            http.Error(w, "Error writing response", http.StatusInternalServerError)
-        }
-    }
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Error reading response body: %v", err)
+			http.Error(w, "Error reading response body", http.StatusInternalServerError)
+			return
+		}
 
-    // Mark the GPU as available at the end of the request
-    services.Compute.MarkAvailable(requestID)
-    log.Println("Marked GPU as available for request ID:", requestID)
+		w.WriteHeader(resp.StatusCode)
+		_, err = w.Write(body)
+		if err != nil {
+			log.Printf("Error writing response: %v", err)
+			http.Error(w, "Error writing response", http.StatusInternalServerError)
+		}
+	}
 }
 
 func clearCacheHandler(w http.ResponseWriter, r *http.Request) {
