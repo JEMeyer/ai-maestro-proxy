@@ -195,6 +195,9 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
+	logger.Printf(ctx, "Proxying request to: %s", proxyURL)
+
 	// Handle context cancellation
 	go func() {
 		<-ctx.Done()
@@ -204,6 +207,11 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 			cancelReq, cancelErr := http.NewRequestWithContext(context.Background(), http.MethodDelete, proxyURL, nil)
 			if cancelErr == nil {
 				http.DefaultClient.Do(cancelReq)
+			}
+			// Ensure GPUs are marked as available on cancellation
+			if gpuIds != nil {
+				unlockedGpuIds := services.Compute.MarkAvailable(requestID)
+				logger.Printf(ctx, "Marked GPU(s) as available: %v", unlockedGpuIds)
 			}
 		}
 	}()
@@ -226,8 +234,6 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
-	logger.Printf(ctx, "Proxying request to: %s", proxyURL)
 	var proxyDuration time.Duration
 	if reqBody.Stream != nil && *reqBody.Stream {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
