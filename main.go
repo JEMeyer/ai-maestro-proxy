@@ -134,6 +134,9 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
     modelName := reqBody.Model
     requestID := r.Header.Get("X-Request-ID")
 
+	// Default to stream - we only don't stream if the stream prop is present and false
+	shouldStream := reqBody.Stream == nil || *reqBody.Stream
+
     // Merge known fields with extra fields
     mergedBody := make(map[string]interface{})
     mergedBody["model"] = reqBody.Model
@@ -185,31 +188,22 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
     logger.Printf(ctx, "Proxying request to: %s", proxyURL)
 
     // Handle context cancellation
-    go func() {
-        <-ctx.Done()
-        if ctx.Err() == context.Canceled {
-            logger.Printf(ctx, "Request was canceled")
-            // Send cancellation to the backend server
-            cancelReq, cancelErr := http.NewRequestWithContext(context.Background(), http.MethodDelete, proxyURL, nil)
-            if cancelErr == nil {
-                http.DefaultClient.Do(cancelReq)
-            }
-        }
-    }()
+	go func() {
+		<-ctx.Done()
+		if ctx.Err() == context.Canceled {
+			logger.Printf(ctx, "Request was canceled")
+			// Send cancellation to the backend server
+			cancelReq, cancelErr := http.NewRequestWithContext(context.Background(), http.MethodDelete, proxyURL, nil)
+			if cancelErr == nil {
+				http.DefaultClient.Do(cancelReq)
+			}
+		}
+	}()
 
     proxyDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
 
-    if reqBody.Stream != nil && *reqBody.Stream {
-		req, err := http.NewRequest("POST", proxyURL, r.Body)
-		if err != nil {
-			logger.Printf(ctx, "Error creating request: %v", err)
-			http.Error(w, "Error creating request", http.StatusInternalServerError)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
+    if shouldStream {
+		resp, err := http.Post(proxyURL, "application/json", r.Body)
 		if err != nil {
 			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
@@ -249,28 +243,28 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	} else {
-        resp, err := http.Post(proxyURL, "application/json", r.Body)
-        if err != nil {
-            logger.Printf(ctx, "Error proxying request: %v", err)
-            http.Error(w, "Error proxying request", http.StatusInternalServerError)
-            return
-        }
-        defer resp.Body.Close()
+		resp, err := http.Post(proxyURL, "application/json", r.Body)
+		if err != nil {
+			logger.Printf(ctx, "Error proxying request: %v", err)
+			http.Error(w, "Error proxying request", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
 
-        body, err := io.ReadAll(resp.Body)
-        if err != nil {
-            logger.Printf(ctx, "Error reading response body: %v", err)
-            http.Error(w, "Error reading response body", http.StatusInternalServerError)
-            return
-        }
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logger.Printf(ctx, "Error reading response body: %v", err)
+			http.Error(w, "Error reading response body", http.StatusInternalServerError)
+			return
+		}
 
-        w.WriteHeader(resp.StatusCode)
-        _, err = w.Write(body)
-        if err != nil {
-            logger.Printf(ctx, "Error writing response: %v", err)
-            http.Error(w, "Error writing response", http.StatusInternalServerError)
-        }
-    }
+		w.WriteHeader(resp.StatusCode)
+		_, err = w.Write(body)
+		if err != nil {
+			logger.Printf(ctx, "Error writing response: %v", err)
+			http.Error(w, "Error writing response", http.StatusInternalServerError)
+		}
+	}
 
     logger.Printf(ctx, "Proxy request duration: %v", proxyDuration)
 

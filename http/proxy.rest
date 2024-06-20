@@ -16,7 +16,7 @@ Content-Type: application/json
   "prompt": "A photo of a cat in a hat, digital art"
 }
 
-### Chat request, JSON
+### Generate request, JSON
 POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
 Content-Type: application/json
 
