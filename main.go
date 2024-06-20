@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"ai-maestro-proxy/db"
@@ -16,6 +17,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
+
+type key int
+
+const (
+	requestIDKey key = iota
+	startTimeKey
+)
+
+// Custom logger that includes the request ID
+type Logger struct {
+	*log.Logger
+}
+
+func (l *Logger) Printf(ctx context.Context, format string, v ...interface{}) {
+	requestID, ok := ctx.Value(requestIDKey).(string)
+	if !ok {
+		requestID = "unknown"
+	}
+	l.Logger.Printf(fmt.Sprintf("[RequestID: %s] %s", requestID, format), v...)
+}
+
+var logger = &Logger{log.New(os.Stdout, "", log.LstdFlags)}
 
 type RequestBody struct {
 	Model     string                 `json:"model"`
@@ -67,30 +90,35 @@ func main() {
 	r.HandleFunc("/cache", clearCacheHandler).Methods("DELETE")
 
 	port := "8080"
-	log.Printf("Load balancer server is running on port %s", port)
+	logger.Printf(context.Background(), "Load balancer server is running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.Method, r.RequestURI)
-		next.ServeHTTP(w, r)
+		ctx := r.Context()
+		startTime := time.Now()
+		ctx = context.WithValue(ctx, startTimeKey, startTime)
+		logger.Printf(ctx, "%s %s", r.Method, r.RequestURI)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func requestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := uuid.New().String()
+		ctx := context.WithValue(r.Context(), requestIDKey, requestID)
 		r.Header.Set("X-Request-ID", requestID)
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Received request:", r.Method, r.URL.Path)
+	ctx := r.Context()
+	logger.Printf(ctx, "Received request: %s %s", r.Method, r.URL.Path)
 
 	if r.Header.Get("Content-Type") != "application/json" {
-		log.Println("Invalid Content-Type:", r.Header.Get("Content-Type"))
+		logger.Printf(ctx, "Invalid Content-Type: %s", r.Header.Get("Content-Type"))
 		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
 		return
 	}
@@ -98,7 +126,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody RequestBody
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
-		log.Printf("Error decoding request body: %v", err)
+		logger.Printf(ctx, "Error decoding request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -121,7 +149,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 	bodyBytes, err := json.Marshal(mergedBody)
 	if err != nil {
-		log.Printf("Error marshaling merged body: %v", err)
+		logger.Printf(ctx, "Error marshaling merged body: %v", err)
 		http.Error(w, "Error processing request", http.StatusInternalServerError)
 		return
 	}
@@ -135,14 +163,14 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 	result, gpuIds, done, err := services.ReserveGPU(modelName, requestID)
 	if err != nil {
-		log.Printf("Error reserving GPU: %v", err)
+		logger.Printf(ctx, "Error reserving GPU: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Log the acquired GPU IDs
 	if gpuIds != nil {
-		log.Printf("Acquired GPU IDs: %v", gpuIds)
+		logger.Printf(ctx, "Acquired GPU IDs: %v", gpuIds)
 	}
 
 	go func() {
@@ -150,12 +178,12 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		case <-done:
 			result, gpuIds, err = services.GetReservedGPU(modelName, requestID)
 			if err != nil {
-				log.Printf("Error getting reserved GPU: %v", err)
+				logger.Printf(ctx, "Error getting reserved GPU: %v", err)
 			} else {
-				log.Printf("Reserved GPU(s): %v", gpuIds)
+				logger.Printf(ctx, "Reserved GPU(s): %v", gpuIds)
 			}
 		case <-ctx.Done():
-			log.Println("Timeout waiting for GPU")
+			logger.Printf(ctx, "Timeout waiting for GPU")
 		}
 	}()
 
@@ -163,7 +191,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		if gpuIds != nil {
 			unlockedGpuIds := services.Compute.MarkAvailable(requestID)
-			log.Printf("Marked GPU(s) as available: %v for request ID: %s", unlockedGpuIds, requestID)
+			logger.Printf(ctx, "Marked GPU(s) as available: %v", unlockedGpuIds)
 		}
 	}()
 
@@ -172,25 +200,26 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		case <-done:
 			result, gpuIds, err = services.GetReservedGPU(modelName, requestID)
 			if err != nil {
-				log.Printf("Error getting reserved GPU: %v", err)
+				logger.Printf(ctx, "Error getting reserved GPU: %v", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			log.Printf("Reserved GPU(s): %v", gpuIds)
+			logger.Printf(ctx, "Reserved GPU(s): %v", gpuIds)
 		case <-ctx.Done():
-			log.Println("Timeout waiting for GPU")
+			logger.Printf(ctx, "Timeout waiting for GPU")
 			http.Error(w, "Timeout waiting for GPU", http.StatusGatewayTimeout)
 			return
 		}
 	}
 
+	proxyStartTime := time.Now()
 	proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
-	log.Println("Proxying request to:", proxyURL)
+	logger.Printf(ctx, "Proxying request to: %s", proxyURL)
 
 	if reqBody.Stream != nil && *reqBody.Stream {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
 		if err != nil {
-			log.Printf("Error proxying request: %v", err)
+			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
 			return
 		}
@@ -201,7 +230,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			log.Println("Streaming not supported")
+			logger.Printf(ctx, "Streaming not supported")
 			http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 			return
 		}
@@ -210,7 +239,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		for {
 			n, err := resp.Body.Read(buf)
 			if err != nil && err != io.EOF {
-				log.Printf("Error reading response: %v", err)
+				logger.Printf(ctx, "Error reading response: %v", err)
 				http.Error(w, "Error streaming response", http.StatusInternalServerError)
 				break
 			} else if n == 0 {
@@ -219,7 +248,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 			_, err = w.Write(buf[:n])
 			if err != nil {
-				log.Printf("Error writing to response: %v", err)
+				logger.Printf(ctx, "Error writing to response: %v", err)
 				http.Error(w, "Error streaming response", http.StatusInternalServerError)
 				break
 			}
@@ -229,7 +258,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
 		if err != nil {
-			log.Printf("Error proxying request: %v", err)
+			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
 			return
 		}
@@ -237,7 +266,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("Error reading response body: %v", err)
+			logger.Printf(ctx, "Error reading response body: %v", err)
 			http.Error(w, "Error reading response body", http.StatusInternalServerError)
 			return
 		}
@@ -245,18 +274,27 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(resp.StatusCode)
 		_, err = w.Write(body)
 		if err != nil {
-			log.Printf("Error writing response: %v", err)
+			logger.Printf(ctx, "Error writing response: %v", err)
 			http.Error(w, "Error writing response", http.StatusInternalServerError)
 		}
 	}
+
+	proxyDuration := time.Since(proxyStartTime)
+	logger.Printf(ctx, "Proxy request duration: %v", proxyDuration)
+
+	totalDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
+	logger.Printf(ctx, "Total request duration: %v", totalDuration)
 }
 
 func clearCacheHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	err := services.DeleteModelAssignmentCache()
 	if err != nil {
+		logger.Printf(ctx, "Failed to clear cache")
 		http.Error(w, "Failed to clear cache", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message": "Cache cleared successfully"}`))
+	logger.Printf(ctx, "Cache cleared successfully")
 }
