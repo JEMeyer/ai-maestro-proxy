@@ -6,28 +6,27 @@ import (
 	"strings"
 )
 
-func ReserveGPU(modelName, requestId string) (*models.ModelAssignment, []string, chan struct{}, error) {
-	if requestId == "" {
-		return nil, nil, nil, fmt.Errorf("requestId is undefined")
-	}
+func ReserveGPU(modelName, requestId string) (*models.ModelAssignment, []string, error) {
+    if requestId == "" {
+        return nil, nil, fmt.Errorf("requestId is undefined")
+    }
 
-	assignments, err := GetModelAssignments(modelName)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+    assignments, err := GetModelAssignments(modelName)
+    if err != nil {
+        return nil, nil, err
+    }
 
-	for _, assignment := range assignments {
-		gpuIds := strings.Split(assignment.GpuIds, ",")
-		if !Compute.IsBusy(gpuIds) {
-			Compute.MarkBusy(gpuIds, requestId)
-			return &assignment, gpuIds, nil, nil
-		}
-	}
+    for _, assignment := range assignments {
+        gpuIds := strings.Split(assignment.GpuIds, ",")
+        if !Compute.IsBusy(gpuIds) {
+            Compute.MarkBusy(gpuIds, requestId)
+            return &assignment, gpuIds, nil
+        }
+    }
 
-	modelQueue := GetModelQueue(modelName)
-	done := make(chan struct{})
-	modelQueue.Add(Job{ModelName: modelName, RequestId: requestId, Done: done})
-	return nil, nil, done, nil
+    modelQueue := GetModelQueue(modelName)
+    modelQueue.Add(Job{ModelName: modelName, RequestId: requestId})
+    return nil, nil, fmt.Errorf("no available GPUs, request added to queue")
 }
 
 func GetReservedGPU(modelName, requestId string) (*models.ModelAssignment, []string, error) {
