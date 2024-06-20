@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Load environment variables from .env file
+# Load environment variables from .env file, ignoring comments
 if [ -f .env ]; then
-    export $(cat .env | xargs)
+    export $(grep -v '^#' .env | xargs)
 fi
 
 # Run the Go application
