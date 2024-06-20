@@ -212,9 +212,9 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	proxyStartTime := time.Now()
 	proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
 	logger.Printf(ctx, "Proxying request to: %s", proxyURL)
+	proxyDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
 
 	if reqBody.Stream != nil && *reqBody.Stream {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
@@ -279,7 +279,6 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	proxyDuration := time.Since(proxyStartTime)
 	logger.Printf(ctx, "Proxy request duration: %v", proxyDuration)
 
 	totalDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
