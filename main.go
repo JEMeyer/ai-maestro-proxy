@@ -187,13 +187,27 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Cleanup function we defer to make sure we don't get gpus stuck in busy state
+	// Ensure GPUs are marked as available on request completion or cancellation
 	defer func() {
 		if gpuIds != nil {
 			unlockedGpuIds := services.Compute.MarkAvailable(requestID)
 			logger.Printf(ctx, "Marked GPU(s) as available: %v", unlockedGpuIds)
 		}
 	}()
+
+	// Handle context cancellation
+	go func() {
+		<-ctx.Done()
+		if ctx.Err() == context.Canceled {
+			logger.Printf(ctx, "Request was canceled")
+			// Send cancellation to the backend server
+			cancelReq, cancelErr := http.NewRequestWithContext(context.Background(), http.MethodDelete, proxyURL, nil)
+			if cancelErr == nil {
+				http.DefaultClient.Do(cancelReq)
+			}
+		}
+	}()
+
 
 	if result == nil {
 		select {
@@ -214,10 +228,10 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 	proxyURL := fmt.Sprintf("http://%s:%d%s", result.IpAddr, result.Port, r.RequestURI)
 	logger.Printf(ctx, "Proxying request to: %s", proxyURL)
-	proxyDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
-
+	var proxyDuration time.Duration
 	if reqBody.Stream != nil && *reqBody.Stream {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
+		proxyDuration = time.Since(ctx.Value(startTimeKey).(time.Time))
 		if err != nil {
 			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
@@ -257,6 +271,7 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
+		proxyDuration = time.Since(ctx.Value(startTimeKey).(time.Time))
 		if err != nil {
 			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
