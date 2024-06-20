@@ -1,4 +1,3 @@
-// services/reserveGPU.go
 package services
 
 import (
