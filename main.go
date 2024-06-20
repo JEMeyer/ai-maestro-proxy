@@ -176,9 +176,27 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
-		if _, err := io.Copy(w, resp.Body); err != nil {
-			log.Printf("Error streaming response: %v", err)
-			http.Error(w, "Error streaming response", http.StatusInternalServerError)
+
+		// Create a buffer to read and write chunks of the response body
+		buf := make([]byte, 4096)
+
+		for {
+			n, err := resp.Body.Read(buf)
+			if err != nil && err != io.EOF {
+				log.Printf("Error reading response: %v", err)
+				http.Error(w, "Error streaming response", http.StatusInternalServerError)
+				break
+			} else if n == 0 {
+				// The connection has been closed
+				break
+			}
+
+			_, err = w.Write(buf[:n])
+			if err != nil {
+				log.Printf("Error writing to response: %v", err)
+				http.Error(w, "Error streaming response", http.StatusInternalServerError)
+				break
+			}
 		}
 	} else {
 		// Handle non-streaming response
