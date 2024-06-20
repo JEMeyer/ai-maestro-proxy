@@ -133,20 +133,26 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
-	result, gpus, done, err := services.ReserveGPU(modelName, requestID)
+	result, gpuIds, done, err := services.ReserveGPU(modelName, requestID)
 	if err != nil {
 		log.Printf("Error reserving GPU: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Log the acquired GPU IDs
+	if gpuIds != nil {
+		log.Printf("Acquired GPU IDs: %v", gpuIds)
+	}
+
 	go func() {
 		select {
 		case <-done:
-			result, gpus, err = services.GetReservedGPU(modelName, requestID)
-			log.Printf("Reserved GPU(s) %v", err)
+			result, gpuIds, err = services.GetReservedGPU(modelName, requestID)
 			if err != nil {
 				log.Printf("Error getting reserved GPU: %v", err)
+			} else {
+				log.Printf("Reserved GPU(s): %v", gpuIds)
 			}
 		case <-ctx.Done():
 			log.Println("Timeout waiting for GPU")
@@ -155,19 +161,22 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Cleanup function we defer to make sure we don't get gpus stuck in busy state
 	defer func() {
-		services.Compute.MarkAvailable(requestID)
-		log.Println("Marked GPU as available for request ID:", requestID)
+		if gpuIds != nil {
+			unlockedGpuIds := services.Compute.MarkAvailable(requestID)
+			log.Printf("Marked GPU(s) as available: %v for request ID: %s", unlockedGpuIds, requestID)
+		}
 	}()
 
 	if result == nil {
 		select {
 		case <-done:
-			result, gpus, err = services.GetReservedGPU(modelName, requestID)
+			result, gpuIds, err = services.GetReservedGPU(modelName, requestID)
 			if err != nil {
 				log.Printf("Error getting reserved GPU: %v", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			log.Printf("Reserved GPU(s): %v", gpuIds)
 		case <-ctx.Done():
 			log.Println("Timeout waiting for GPU")
 			http.Error(w, "Timeout waiting for GPU", http.StatusGatewayTimeout)

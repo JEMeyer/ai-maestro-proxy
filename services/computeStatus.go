@@ -35,11 +35,14 @@ func (cs *ComputeStatus) MarkBusy(gpuIds []string, requestId string) {
 	}
 }
 
-func (cs *ComputeStatus) MarkAvailable(requestId string) {
+func (cs *ComputeStatus) MarkAvailable(requestId string) []string {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
+
+	var unlockedGpuIds []string
 	for gpuId, reqId := range cs.pendingRequests {
 		if reqId == requestId {
+			unlockedGpuIds = append(unlockedGpuIds, gpuId)
 			delete(cs.pendingRequests, gpuId)
 		}
 	}
@@ -55,6 +58,8 @@ func (cs *ComputeStatus) MarkAvailable(requestId string) {
 			}
 		}
 	}
+
+	return unlockedGpuIds
 }
 
 var Compute = NewComputeStatus()
