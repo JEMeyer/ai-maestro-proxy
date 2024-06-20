@@ -200,45 +200,55 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
     proxyDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
 
     if reqBody.Stream != nil && *reqBody.Stream {
-        resp, err := http.Post(proxyURL, "application/json", r.Body)
-        if err != nil {
-            logger.Printf(ctx, "Error proxying request: %v", err)
-            http.Error(w, "Error proxying request", http.StatusInternalServerError)
-            return
-        }
-        defer resp.Body.Close()
+		req, err := http.NewRequest("POST", proxyURL, r.Body)
+		if err != nil {
+			logger.Printf(ctx, "Error creating request: %v", err)
+			http.Error(w, "Error creating request", http.StatusInternalServerError)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
 
-        w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-        w.WriteHeader(resp.StatusCode)
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Printf(ctx, "Error proxying request: %v", err)
+			http.Error(w, "Error proxying request", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
 
-        flusher, ok := w.(http.Flusher)
-        if !ok {
-            logger.Printf(ctx, "Streaming not supported")
-            http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-            return
-        }
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
 
-        buf := make([]byte, 4096)
-        for {
-            n, err := resp.Body.Read(buf)
-            if err != nil && err != io.EOF {
-                logger.Printf(ctx, "Error reading response: %v", err)
-                http.Error(w, "Error streaming response", http.StatusInternalServerError)
-                break
-            } else if n == 0 {
-                break
-            }
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			logger.Printf(ctx, "Streaming not supported")
+			http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+			return
+		}
 
-            _, err = w.Write(buf[:n])
-            if err != nil {
-                logger.Printf(ctx, "Error writing to response: %v", err)
-                http.Error(w, "Error streaming response", http.StatusInternalServerError)
-                break
-            }
+		// Use io.Copy to handle streaming
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			if err != nil && err != io.EOF {
+				logger.Printf(ctx, "Error reading response: %v", err)
+				http.Error(w, "Error streaming response", http.StatusInternalServerError)
+				break
+			} else if n == 0 {
+				break
+			}
 
-            flusher.Flush()
-        }
-    } else {
+			_, err = w.Write(buf[:n])
+			if err != nil {
+				logger.Printf(ctx, "Error writing to response: %v", err)
+				http.Error(w, "Error streaming response", http.StatusInternalServerError)
+				break
+			}
+
+			flusher.Flush()
+		}
+	} else {
         resp, err := http.Post(proxyURL, "application/json", r.Body)
         if err != nil {
             logger.Printf(ctx, "Error proxying request: %v", err)

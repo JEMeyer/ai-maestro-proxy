@@ -25,8 +25,19 @@ func ReserveGPU(modelName, requestId string) (*models.ModelAssignment, []string,
     }
 
     modelQueue := GetModelQueue(modelName)
-    modelQueue.Add(Job{ModelName: modelName, RequestId: requestId})
-    return nil, nil, fmt.Errorf("no available GPUs, request added to queue")
+    done := make(chan struct{})
+    modelQueue.Add(Job{ModelName: modelName, RequestId: requestId, Done: done})
+
+    // Block until a GPU becomes available
+    <-done
+
+    // Retrieve the reserved GPUs after being notified
+    assignment, gpuIds, err := GetReservedGPU(modelName, requestId)
+    if err != nil || gpuIds == nil {
+        return nil, nil, fmt.Errorf("failed to reserve GPU after waiting")
+    }
+
+    return assignment, gpuIds, nil
 }
 
 func GetReservedGPU(modelName, requestId string) (*models.ModelAssignment, []string, error) {
