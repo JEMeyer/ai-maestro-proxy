@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: Build the Go application
-FROM golang:1.19.2-bullseye AS builder
+FROM golang:1.22-bullseye AS builder
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
