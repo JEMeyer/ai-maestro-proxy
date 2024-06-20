@@ -13,8 +13,6 @@ import (
 	"ai-maestro-proxy/db"
 	"ai-maestro-proxy/services"
 
-	"github.com/joho/godotenv"
-
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
@@ -54,12 +52,6 @@ func (r *RequestBody) UnmarshalJSON(data []byte) error {
 }
 
 func main() {
-	// Load environment variables from .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
-
 	db.InitDB()
 	db.InitRedis()
 
