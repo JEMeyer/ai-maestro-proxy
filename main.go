@@ -234,10 +234,9 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var proxyDuration time.Duration
+	proxyDuration := time.Since(ctx.Value(startTimeKey).(time.Time))
 	if reqBody.Stream != nil && *reqBody.Stream {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
-		proxyDuration = time.Since(ctx.Value(startTimeKey).(time.Time))
 		if err != nil {
 			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
@@ -277,7 +276,6 @@ func consolidatedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		resp, err := http.Post(proxyURL, "application/json", r.Body)
-		proxyDuration = time.Since(ctx.Value(startTimeKey).(time.Time))
 		if err != nil {
 			logger.Printf(ctx, "Error proxying request: %v", err)
 			http.Error(w, "Error proxying request", http.StatusInternalServerError)
