@@ -1,44 +1,34 @@
-# Use a minimal Node.js base image
-FROM node:18-alpine as base
+# syntax=docker/dockerfile:1
 
-# Install PM2 globally
-RUN npm install -g pm2
+# Stage 1: Build the Go application
+FROM golang:1.19.2-bullseye AS builder
 
-# Builder stage
-FROM base AS builder
-
-# Set the working directory inside the container
+# Set the Current Working Directory inside the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-# Install dependencies
-RUN npm ci
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+RUN go mod download
 
-# Copy the rest of the project files
+# Copy the source from the current directory to the Working Directory inside the container
 COPY . .
 
-# Build the TypeScript code to JavaScript
-RUN npm run build
+# Build the Go app
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
-# Final runtime image
-FROM base
+# Stage 2: Create a minimal image for the final executable
+FROM alpine:latest
 
-# Set the working directory inside the container
-WORKDIR /app
+# Set the Current Working Directory inside the container
+WORKDIR /root/
 
-# Copy the package.json and package-lock.json files from the builder image
-COPY --from=builder /app/package*.json ./
+# Copy the Pre-built binary file from the previous stage
+COPY --from=builder /app/main .
 
-# Copy the built JavaScript files from the builder image
-COPY --from=builder /app/dist ./dist
+# Expose port 8080 to the outside world
+EXPOSE 8080
 
-# Install production dependencies
-RUN npm ci --only=production
-
-# Proxy port
-EXPOSE 11434
-
-# Start the application using PM2
-CMD ["pm2-runtime", "dist/proxy.js"]
+# Run the executable
+CMD ["./main"]

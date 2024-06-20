@@ -1,4 +1,4 @@
-### Generate an image with sdxl
+### Generate an image with sdxl-turbo
 POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
 Content-Type: application/json
 
@@ -7,7 +7,7 @@ Content-Type: application/json
   "prompt": "A photo of a cat in a hat, digital art"
 }
 
-### Generate an image with sd
+### Generate an image with sd-turbo
 POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
 Content-Type: application/json
 
@@ -16,27 +16,7 @@ Content-Type: application/json
   "prompt": "A photo of a cat in a hat, digital art"
 }
 
-### Chat request, no stream
-POST http://192.168.1.32:{{proxyPort}}/api/chat
-Content-Type: application/json
-
-{
-  "model": "codestral",
-  "prompt": "Why is the sky blue and not green?",
-  "stream": false
-}
-
-### direct to computer
-POST http://192.168.1.32:{{proxyPort}}/api/generate
-Content-Type: application/json
-
-{
-  "model": "codestral",
-  "prompt": "Why is the sky blue and not green?",
-  "stream": true
-}
-
-### Generate generate, no stream
+### Chat request, JSON
 POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
 Content-Type: application/json
 
