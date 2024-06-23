@@ -15,40 +15,88 @@ using Serilog;
 namespace ai_maestro_proxy.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("")]
     public class ProxyController(DatabaseService databaseService, CacheService cacheService, IHttpClientFactory httpClientFactory) : ControllerBase
     {
         private static readonly SemaphoreSlim _semaphore = new(1, 1);
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<(HttpContext context, string body)>> _queues = new();
         private static readonly ConcurrentDictionary<string, HashSet<string>> _lockedGpus = new();
 
-        [HttpPost("{endpoint}")]
+        [HttpPost("txt2img")]
+        public async Task<IActionResult> HandleTxt2Img([FromBody] RequestModel request)
+        {
+            Log.Information("Endpoint hit: {Endpoint}, Model requested: {Model}", "txt2img", request.Model);
+            return await HandleRequest("txt2img", request);
+        }
+
+        [HttpPost("img2img")]
+        public async Task<IActionResult> HandleImgImg([FromBody] RequestModel request)
+        {
+            return await HandleRequest("txt2img", request);
+        }
+
+        [HttpPost("api/generate")]
+        public async Task<IActionResult> Handlegenerate([FromBody] RequestModel request)
+        {
+            return await HandleRequest("api/generate", request);
+        }
+
+        [HttpPost("api/chat")]
+        public async Task<IActionResult> HandleChat([FromBody] RequestModel request)
+        {
+            return await HandleRequest("api/chat", request);
+        }
+
+        [HttpPost("api/embeddings")]
+        public async Task<IActionResult> HandleEmbeddings([FromBody] RequestModel request)
+        {
+            return await HandleRequest("api/embeddings", request);
+        }
+
         public async Task<IActionResult> HandleRequest(string endpoint, [FromBody] RequestModel request)
         {
-            Log.Information("Endpoint hit: {Endpoint}, Model requested: {Model}", endpoint, request.Model);
+            Log.Information("Handling request for endpoint: {Endpoint}, Model: {Model}", endpoint, request.Model);
 
             var cacheKey = $"model:{request.Model}";
             var cachedAssignments = await cacheService.GetCachedValueAsync(cacheKey);
 
+            if (!string.IsNullOrEmpty(cachedAssignments))
+            {
+                Log.Information("Cache hit for model: {Model}", request.Model);
+            }
+            else
+            {
+                Log.Information("Cache miss for model: {Model}", request.Model);
+            }
+
             IEnumerable<Assignment>? assignmentList;
-            if (cachedAssignments != null)
+            if (!string.IsNullOrEmpty(cachedAssignments))
             {
                 assignmentList = JsonConvert.DeserializeObject<IEnumerable<Assignment>>(cachedAssignments);
             }
             else
             {
-                assignmentList = await databaseService.GetAssignmentsAsync(request.Model);
-                await cacheService.SetCachedValueAsync(cacheKey, JsonConvert.SerializeObject(assignmentList), TimeSpan.FromMinutes(5));
+                try
+                {
+                    Log.Information("Fetching assignments from database for model: {Model}", request.Model);
+                    assignmentList = await databaseService.GetAssignmentsAsync(request.Model);
+                    await cacheService.SetCachedValueAsync(cacheKey, JsonConvert.SerializeObject(assignmentList), TimeSpan.FromMinutes(5));
+                    Log.Information("Fetched and cached assignments for model: {Model}", request.Model);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error fetching assignments from database for model: {Model}", request.Model);
+                    return StatusCode(StatusCodes.Status500InternalServerError, "Error fetching assignments");
+                }
             }
 
             if (assignmentList == null || !assignmentList.Any())
             {
-                Log.Information("No assignments found for model {model}.", request.Model);
-                return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+                Log.Information("No assignments found for model: {Model}", request.Model);
+                return StatusCode(StatusCodes.Status500InternalServerError, "No assignments found");
             }
 
             Assignment? selectedAssignment = null;
-
             await _semaphore.WaitAsync();
             try
             {
@@ -65,15 +113,13 @@ namespace ai_maestro_proxy.Controllers
 
                 if (selectedAssignment == null)
                 {
-                    Log.Information("All GPUs are taken, adding request to queue.");
+                    Log.Information("All GPUs are taken, adding request to queue for model: {Model}", request.Model);
                     var body = await HttpContext.ReadRequestBodyAsync();
-                    if (!_queues.TryGetValue(request.Model, out ConcurrentQueue<(HttpContext context, string body)>? value))
+                    if (!_queues.ContainsKey(request.Model))
                     {
-                        value = new ConcurrentQueue<(HttpContext, string)>();
-                        _queues[request.Model] = value;
+                        _queues[request.Model] = new ConcurrentQueue<(HttpContext, string)>();
                     }
-
-                    value.Enqueue((HttpContext, body));
+                    _queues[request.Model].Enqueue((HttpContext, body));
                     return new StatusCodeResult(StatusCodes.Status202Accepted);
                 }
             }

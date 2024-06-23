@@ -1,8 +1,5 @@
 @ai_maestro_proxy_HostAddress = http://localhost:5079
 
-GET {{ai_maestro_proxy_HostAddress}}/weatherforecast/
-Accept: application/json
-
 ###
 ### Generate an image with sdxl-turbo
 POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
