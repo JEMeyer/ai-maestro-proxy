@@ -11,7 +11,8 @@ namespace ai_maestro_proxy.Services
         public async Task<string> GetCachedValueAsync(string key)
         {
             var db = _redis.GetDatabase();
-            return await db.StringGetAsync(key);
+            var value = await db.StringGetAsync(key);
+            return value.ToString() ?? string.Empty;
         }
 
         public async Task SetCachedValueAsync(string key, string value, TimeSpan expiration)

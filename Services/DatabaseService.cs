@@ -6,18 +6,11 @@ using ai_maestro_proxy.Models;
 
 namespace ai_maestro_proxy.Services
 {
-    public class DatabaseService
+    public class DatabaseService(string connectionString)
     {
-        private readonly string _connectionString;
-
-        public DatabaseService(string connectionString)
-        {
-            _connectionString = connectionString;
-        }
-
         public async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
         {
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
 
             string query = @"

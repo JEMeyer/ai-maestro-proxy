@@ -13,6 +13,7 @@ namespace ai_maestro_proxy
         {
             var configuration = new ConfigurationBuilder()
                 .AddJsonFile("appsettings.json")
+                .AddEnvironmentVariables()
                 .Build();
 
             Log.Logger = new LoggerConfiguration()

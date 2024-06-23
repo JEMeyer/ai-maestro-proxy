@@ -16,21 +16,11 @@ namespace ai_maestro_proxy.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class ProxyController : ControllerBase
+    public class ProxyController(DatabaseService databaseService, CacheService cacheService, IHttpClientFactory httpClientFactory) : ControllerBase
     {
-        private readonly DatabaseService _databaseService;
-        private readonly CacheService _cacheService;
-        private readonly IHttpClientFactory _httpClientFactory;
         private static readonly SemaphoreSlim _semaphore = new(1, 1);
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<(HttpContext context, string body)>> _queues = new();
         private static readonly ConcurrentDictionary<string, HashSet<string>> _lockedGpus = new();
-
-        public ProxyController(DatabaseService databaseService, CacheService cacheService, IHttpClientFactory httpClientFactory)
-        {
-            _databaseService = databaseService;
-            _cacheService = cacheService;
-            _httpClientFactory = httpClientFactory;
-        }
 
         [HttpPost("{endpoint}")]
         public async Task<IActionResult> HandleRequest(string endpoint, [FromBody] RequestModel request)
@@ -38,7 +28,7 @@ namespace ai_maestro_proxy.Controllers
             Log.Information("Endpoint hit: {Endpoint}, Model requested: {Model}", endpoint, request.Model);
 
             var cacheKey = $"model:{request.Model}";
-            var cachedAssignments = await _cacheService.GetCachedValueAsync(cacheKey);
+            var cachedAssignments = await cacheService.GetCachedValueAsync(cacheKey);
 
             IEnumerable<Assignment>? assignmentList;
             if (cachedAssignments != null)
@@ -47,8 +37,8 @@ namespace ai_maestro_proxy.Controllers
             }
             else
             {
-                assignmentList = await _databaseService.GetAssignmentsAsync(request.Model);
-                await _cacheService.SetCachedValueAsync(cacheKey, JsonConvert.SerializeObject(assignmentList), TimeSpan.FromMinutes(5));
+                assignmentList = await databaseService.GetAssignmentsAsync(request.Model);
+                await cacheService.SetCachedValueAsync(cacheKey, JsonConvert.SerializeObject(assignmentList), TimeSpan.FromMinutes(5));
             }
 
             if (assignmentList == null || !assignmentList.Any())
@@ -93,7 +83,7 @@ namespace ai_maestro_proxy.Controllers
             }
 
             var proxyUri = new Uri($"http://{selectedAssignment.Ip}:{selectedAssignment.Port}/{endpoint}");
-            var client = _httpClientFactory.CreateClient();
+            var client = httpClientFactory.CreateClient();
 
             var requestMessage = new HttpRequestMessage
             {

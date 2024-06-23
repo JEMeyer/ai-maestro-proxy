@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ai_maestro_proxy.Services;
+using Serilog;
 using Newtonsoft.Json;
 
 namespace ai_maestro_proxy
@@ -22,7 +23,7 @@ namespace ai_maestro_proxy
             services.AddHttpClient();
 
             var connectionString = Configuration.GetConnectionString("MariaDb");
-            services.AddSingleton(new DatabaseService(connectionString));
+            services.AddSingleton(new DatabaseService(connectionString ?? ""));
 
             var redisConfig = Configuration.GetSection("Redis").Get<RedisConfig>();
             services.AddSingleton(new CacheService(redisConfig.ConnectionString));
