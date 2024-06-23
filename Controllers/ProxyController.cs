@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ai_maestro_proxy.Models;
@@ -18,9 +19,9 @@ namespace ai_maestro_proxy.Controllers
     [Route("")]
     public class ProxyController(DatabaseService databaseService, CacheService cacheService, IHttpClientFactory httpClientFactory) : ControllerBase
     {
-        private static readonly SemaphoreSlim _semaphore = new(1, 1);
-        private static readonly ConcurrentDictionary<string, ConcurrentQueue<(HttpContext context, string body)>> _queues = new();
-        private static readonly ConcurrentDictionary<string, HashSet<string>> _lockedGpus = new();
+        private static readonly SemaphoreSlim semaphore = new(1, 1);
+        private static readonly ConcurrentDictionary<string, ConcurrentQueue<(HttpContext context, string body)>> queues = new();
+        private static readonly ConcurrentDictionary<string, HashSet<string>> lockedGpus = new();
 
         [HttpPost("txt2img")]
         public async Task<IActionResult> HandleTxt2Img([FromBody] RequestModel request)
@@ -53,7 +54,7 @@ namespace ai_maestro_proxy.Controllers
             return await HandleRequest("api/embeddings", request);
         }
 
-        public async Task<IActionResult> HandleRequest(string endpoint, [FromBody] RequestModel request)
+        private async Task<IActionResult> HandleRequest(string endpoint, RequestModel request)
         {
             Log.Information("Handling request for endpoint: {Endpoint}, Model: {Model}", endpoint, request.Model);
 
@@ -97,7 +98,7 @@ namespace ai_maestro_proxy.Controllers
             }
 
             Assignment? selectedAssignment = null;
-            await _semaphore.WaitAsync();
+            await semaphore.WaitAsync();
             try
             {
                 foreach (var assignment in assignmentList)
@@ -115,27 +116,40 @@ namespace ai_maestro_proxy.Controllers
                 {
                     Log.Information("All GPUs are taken, adding request to queue for model: {Model}", request.Model);
                     var body = await HttpContext.ReadRequestBodyAsync();
-                    if (!_queues.ContainsKey(request.Model))
+                    if (!queues.TryGetValue(request.Model, out ConcurrentQueue<(HttpContext context, string body)>? value))
                     {
-                        _queues[request.Model] = new ConcurrentQueue<(HttpContext, string)>();
+                        value = new ConcurrentQueue<(HttpContext, string)>();
+                        queues[request.Model] = value;
                     }
-                    _queues[request.Model].Enqueue((HttpContext, body));
+
+                    value.Enqueue((HttpContext, body));
                     return new StatusCodeResult(StatusCodes.Status202Accepted);
                 }
             }
             finally
             {
-                _semaphore.Release();
+                semaphore.Release();
             }
 
             var proxyUri = new Uri($"http://{selectedAssignment.Ip}:{selectedAssignment.Port}/{endpoint}");
             var client = httpClientFactory.CreateClient();
 
+            // Convert RequestModel to Dictionary
+            var requestDict = new Dictionary<string, object>(request.AdditionalData)
+            {
+                { "model", request.Model },
+                { "stream", request.Stream ?? true }
+            };
+
+            // Serialize the dictionary to JSON
+            var requestBody = JsonConvert.SerializeObject(requestDict);
+            Log.Information("Proxied request body: {RequestBody}", requestBody);
+
             var requestMessage = new HttpRequestMessage
             {
                 Method = new HttpMethod(HttpContext.Request.Method),
                 RequestUri = proxyUri,
-                Content = new StringContent(await HttpContext.ReadRequestBodyAsync(), System.Text.Encoding.UTF8, "application/json")
+                Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
             };
 
             foreach (var header in HttpContext.Request.Headers)
@@ -166,6 +180,13 @@ namespace ai_maestro_proxy.Controllers
                 HttpContext.Response.Headers.Remove("transfer-encoding");
                 await responseMessage.Content.CopyToAsync(HttpContext.Response.Body);
             }
+            catch (HttpRequestException ex)
+            {
+                var statusCode = responseMessage?.StatusCode ?? System.Net.HttpStatusCode.InternalServerError;
+                var responseBody = responseMessage != null ? await responseMessage.Content.ReadAsStringAsync() : "No response body";
+                Log.Error(ex, "HTTP request to {ProxyUri} failed with status code {StatusCode}. Response body: {ResponseBody}", proxyUri, statusCode, responseBody);
+                return StatusCode((int)statusCode, responseBody);
+            }
             finally
             {
                 stopwatch.Stop();
@@ -180,7 +201,7 @@ namespace ai_maestro_proxy.Controllers
         {
             foreach (var gpuId in gpuIds)
             {
-                if (_lockedGpus.Values.Any(gpus => gpus.Contains(gpuId)))
+                if (lockedGpus.Values.Any(gpus => gpus.Contains(gpuId)))
                 {
                     return false;
                 }
@@ -192,7 +213,7 @@ namespace ai_maestro_proxy.Controllers
         {
             foreach (var gpuId in gpuIds)
             {
-                _lockedGpus.GetOrAdd(gpuId, _ => new HashSet<string>()).Add(gpuId);
+                lockedGpus.GetOrAdd(gpuId, _ => []).Add(gpuId);
                 Log.Information("GPU {GpuId} marked as taken", gpuId);
             }
         }
@@ -201,31 +222,27 @@ namespace ai_maestro_proxy.Controllers
         {
             foreach (var gpuId in gpuIds)
             {
-                if (_lockedGpus.TryGetValue(gpuId, out HashSet<string>? value))
+                if (lockedGpus.TryGetValue(gpuId, out HashSet<string>? value))
                 {
                     value.Remove(gpuId);
                     if (value.Count == 0)
                     {
-                        _lockedGpus.TryRemove(gpuId, out _);
+                        lockedGpus.TryRemove(gpuId, out _);
                     }
                     Log.Information("GPU {GpuId} marked as available", gpuId);
                 }
             }
 
-            foreach (var queue in _queues)
+            foreach (var queue in queues)
             {
                 if (queue.Value.TryDequeue(out var contextPair))
                 {
                     var model = queue.Key;
-                    if (!_queues[model].IsEmpty)
+                    if (!queues[model].IsEmpty)
                     {
                         Log.Information("Releasing request from queue for model {Model}", model);
                         contextPair.context.WriteRequestBody(contextPair.body);
-                        RequestModel? deserializedRequest = JsonConvert.DeserializeObject<RequestModel>(contextPair.body);
-                        if (deserializedRequest != null)
-                        {
-                            await HandleRequest("proxy", deserializedRequest);
-                        }
+                        await HandleRequest("proxy", JsonConvert.DeserializeObject<RequestModel>(contextPair.body)!);
                     }
                 }
             }
@@ -236,5 +253,6 @@ namespace ai_maestro_proxy.Controllers
     {
         public required string Model { get; set; }
         public bool? Stream { get; set; }
+        public Dictionary<string, object> AdditionalData { get; set; } = [];
     }
 }
