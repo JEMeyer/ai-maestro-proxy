@@ -5,7 +5,7 @@ namespace ai_maestro_proxy.Utilities
         public static async Task<string> ReadRequestBodyAsync(this HttpContext context)
         {
             context.Request.EnableBuffering();
-            using StreamReader reader = new StreamReader(context.Request.Body, leaveOpen: true);
+            using StreamReader reader = new(context.Request.Body, leaveOpen: true);
             string body = await reader.ReadToEndAsync();
             context.Request.Body.Position = 0;
             return body;

@@ -18,5 +18,11 @@ namespace ai_maestro_proxy.Services
             IDatabase db = _redis.GetDatabase();
             await db.StringSetAsync(key, value, expiration);
         }
+
+        public async Task ClearCachedValueAsync(string key)
+        {
+            IDatabase db = _redis.GetDatabase();
+            await db.KeyDeleteAsync(key);
+        }
     }
 }

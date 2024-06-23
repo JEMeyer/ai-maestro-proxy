@@ -9,7 +9,7 @@ namespace ai_maestro_proxy.Services
     {
         public async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
         {
-            using MySqlConnection connection = new MySqlConnection(connectionString);
+            using MySqlConnection connection = new(connectionString);
             await connection.OpenAsync();
 
             string query = @"
@@ -36,6 +36,5 @@ namespace ai_maestro_proxy.Services
             Log.Information("SQL query executed successfully. Retrieved {Count} assignments for model: {ModelName}", assignments.Count(), modelName);
             return assignments;
         }
-
     }
 }
