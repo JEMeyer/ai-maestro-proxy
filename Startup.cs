@@ -3,31 +3,49 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using ai_maestro_proxy.Services;
+using Newtonsoft.Json;
 
-public class Startup(IConfiguration configuration)
+namespace ai_maestro_proxy
 {
-    public IConfiguration Configuration { get; } = configuration;
-
-    public void ConfigureServices(IServiceCollection services)
+    public class Startup(IConfiguration configuration)
     {
-        services.AddControllers();
-        services.AddHttpClient();
-    }
+        public IConfiguration Configuration { get; } = configuration;
 
-    public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
-    {
-        if (env.IsDevelopment())
+        public void ConfigureServices(IServiceCollection services)
         {
-            app.UseDeveloperExceptionPage();
+            services.AddControllers().AddNewtonsoftJson(options =>
+            {
+                options.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;
+            });
+
+            services.AddHttpClient();
+
+            var connectionString = Configuration.GetConnectionString("MariaDb");
+            services.AddSingleton(new DatabaseService(connectionString));
+
+            var redisConfig = Configuration.GetSection("Redis").Get<RedisConfig>();
+            services.AddSingleton(new CacheService(redisConfig.ConnectionString));
         }
 
-        app.UseRouting();
-
-        app.UseEndpoints(endpoints =>
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            endpoints.MapControllers();
-        });
+            if (env.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
 
-        app.UseMiddleware<ProxyMiddleware>();
+            app.UseRouting();
+
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapControllers();
+            });
+        }
+
+        public class RedisConfig
+        {
+            public required string ConnectionString { get; set; }
+        }
     }
 }
