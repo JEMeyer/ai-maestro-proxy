@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Dapper;
 using MySql.Data.MySqlClient;
 using ai_maestro_proxy.Models;
@@ -11,7 +9,7 @@ namespace ai_maestro_proxy.Services
     {
         public async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
         {
-            using var connection = new MySqlConnection(connectionString);
+            using MySqlConnection connection = new MySqlConnection(connectionString);
             await connection.OpenAsync();
 
             string query = @"
@@ -34,7 +32,7 @@ namespace ai_maestro_proxy.Services
             avgGpuWeight DESC;";
 
             Log.Information("Executing SQL query to fetch assignments for model: {ModelName}", modelName);
-            var assignments = await connection.QueryAsync<Assignment>(query, new { ModelName = modelName });
+            IEnumerable<Assignment> assignments = await connection.QueryAsync<Assignment>(query, new { ModelName = modelName });
             Log.Information("SQL query executed successfully. Retrieved {Count} assignments for model: {ModelName}", assignments.Count(), modelName);
             return assignments;
         }

@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using StackExchange.Redis;
 
 namespace ai_maestro_proxy.Services
@@ -10,14 +8,14 @@ namespace ai_maestro_proxy.Services
 
         public async Task<string> GetCachedValueAsync(string key)
         {
-            var db = _redis.GetDatabase();
-            var value = await db.StringGetAsync(key);
+            IDatabase db = _redis.GetDatabase();
+            RedisValue value = await db.StringGetAsync(key);
             return value.ToString() ?? string.Empty;
         }
 
         public async Task SetCachedValueAsync(string key, string value, TimeSpan expiration)
         {
-            var db = _redis.GetDatabase();
+            IDatabase db = _redis.GetDatabase();
             await db.StringSetAsync(key, value, expiration);
         }
     }
