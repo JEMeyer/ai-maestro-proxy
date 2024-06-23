@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ai-maestro-proxy")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+25376643101b6e21e9ab0997cb72da33f99646e1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+526358673974930513b5fa3a5b020241b83c1418")]
 [assembly: System.Reflection.AssemblyProductAttribute("ai-maestro-proxy")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ai-maestro-proxy")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
