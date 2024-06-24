@@ -4,6 +4,7 @@ using ai_maestro_proxy.Services;
 using System.Text;
 using Serilog;
 using ai_maestro_proxy.ModelBinders;
+using Newtonsoft.Json;
 
 namespace ai_maestro_proxy.Controllers
 {
@@ -13,10 +14,16 @@ namespace ai_maestro_proxy.Controllers
     {
         [HttpPost("txt2img")]
         public async Task<IActionResult> HandleTxt2Img(
-            [ModelBinder(BinderType = typeof(RequestModelBinder))] RequestModel request,
+            [ModelBinder(typeof(RequestModelBinder))] RequestModel request,
             CancellationToken cancellationToken)
         {
-            Log.Information("Endpoint hit: {Endpoint}, Model requested: {Model}", "txt2img", request.Model);
+            using (var reader = new StreamReader(Request.Body))
+            {
+                var body = await reader.ReadToEndAsync(cancellationToken);
+                Log.Warning("Request body: {Body}", body);
+            }
+            var requestJson = JsonConvert.SerializeObject(request, Formatting.Indented);
+            Log.Information("Endpoint hit: {Endpoint}, Model requested: {Model}, RequestModel: {RequestModel}", "txt2img", request.Model, requestJson);
             return await requestHandlerService.HandleRequest("txt2img", request, HttpContext, cancellationToken);
         }
 

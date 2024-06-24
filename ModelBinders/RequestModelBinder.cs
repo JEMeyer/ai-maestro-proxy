@@ -7,58 +7,39 @@ namespace ai_maestro_proxy.ModelBinders
 {
     public class RequestModelBinder : IModelBinder
     {
-        public Task BindModelAsync(ModelBindingContext bindingContext)
+        public async Task BindModelAsync(ModelBindingContext bindingContext)
         {
             ArgumentNullException.ThrowIfNull(bindingContext);
 
-            var valueProviderResult = bindingContext.ValueProvider.GetValue(bindingContext.ModelName);
+            // Read the request body
+            using var reader = new StreamReader(bindingContext.HttpContext.Request.Body);
+            var body = await reader.ReadToEndAsync();
 
-            if (valueProviderResult == ValueProviderResult.None)
+            // Parse the JSON
+            var jsonObject = JObject.Parse(body);
+            var modelString = jsonObject["model"]?.ToString();
+
+            ArgumentNullException.ThrowIfNull(modelString);
+
+            // Create the RequestModel
+            var requestModel = new RequestModel
             {
-                Log.Warning("No value found in the value provider for {ModelName}", bindingContext.ModelName);
-                return Task.CompletedTask;
-            }
-
-            var values = valueProviderResult.FirstValue;
-
-            if (string.IsNullOrEmpty(values))
-            {
-                Log.Warning("Value is null or empty for {ModelName}", bindingContext.ModelName);
-                return Task.CompletedTask;
-            }
-
-            // Initialize the model with a temporary value for the required property
-            var model = new RequestModel
-            {
-                Model = string.Empty
+                Model = modelString,
+                Stream = jsonObject["stream"]?.ToObject<bool>(),
+                AdditionalProperties = []
             };
 
-            try
+            // Add all properties except 'model' and 'stream' to AdditionalProperties
+            foreach (var prop in jsonObject.Properties())
             {
-                Log.Information("Parsing JSON for {ModelName}", bindingContext.ModelName);
-                var jObject = JObject.Parse(values);
-                model.Model = jObject["model"]?.ToString() ?? string.Empty;
-                model.Stream = jObject["stream"]?.ToObject<bool?>();
-
-                foreach (var property in jObject)
+                if (prop.Name != "model" && prop.Name != "stream")
                 {
-                    if (property.Key != "model" && property.Key != "stream" && property.Value != null)
-                    {
-                        model.AdditionalProperties[property.Key] = property.Value;
-                        Log.Information("Added property {Key} with value {Value}", property.Key, property.Value);
-                    }
+                    requestModel.AdditionalProperties[prop.Name] = prop.Value;
                 }
-
-                bindingContext.Result = ModelBindingResult.Success(model);
-                Log.Information("Successfully bound model for {ModelName}", bindingContext.ModelName);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error binding model for {ModelName}", bindingContext.ModelName);
-                bindingContext.ModelState.AddModelError(bindingContext.ModelName, ex.Message);
             }
 
-            return Task.CompletedTask;
+            // Set the result
+            bindingContext.Result = ModelBindingResult.Success(requestModel);
         }
     }
 }

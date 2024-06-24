@@ -11,6 +11,9 @@ namespace ai_maestro_proxy
             // Add logging
             services.AddLogging();
 
+            // Register HttpClient
+            services.AddHttpClient();
+
             // Register other services
             string? connectionString = Configuration.GetConnectionString("MariaDb");
             services.AddSingleton(new DatabaseService(connectionString ?? ""));
