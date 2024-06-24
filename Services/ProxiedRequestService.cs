@@ -22,14 +22,14 @@ namespace ai_maestro_proxy.Services
             return requestMessage;
         }
 
-        public async Task SendProxiedRequest(HttpRequestMessage requestMessage, Uri proxyUri, HttpContext httpContext, CancellationToken cancellationToken)
+        public async Task SendProxiedRequest(HttpRequestMessage requestMessage, HttpContext httpContext, CancellationToken cancellationToken)
         {
             HttpClient client = httpClientFactory.CreateClient();
 
             HttpResponseMessage? responseMessage = null;
             try
             {
-                Log.Information("Sending proxied request to {ProxyUri}", proxyUri);
+                Log.Information("Sending proxied request to {ProxyUri}", requestMessage.RequestUri);
                 responseMessage = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
                 httpContext.Response.StatusCode = (int)responseMessage.StatusCode;
@@ -48,14 +48,14 @@ namespace ai_maestro_proxy.Services
             }
             catch (HttpRequestException ex) when (ex.InnerException is TaskCanceledException)
             {
-                Log.Information("Request to {ProxyUri} was canceled.", proxyUri);
+                Log.Information("Request to {ProxyUri} was canceled.", requestMessage.RequestUri);
                 httpContext.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
             }
             catch (HttpRequestException ex)
             {
                 var statusCode = responseMessage?.StatusCode ?? System.Net.HttpStatusCode.InternalServerError;
                 var responseBody = responseMessage != null ? await responseMessage.Content.ReadAsStringAsync(cancellationToken) : "No response body";
-                Log.Error(ex, "HTTP request to {ProxyUri} failed with status code {StatusCode}. Response body: {ResponseBody}", proxyUri, statusCode, responseBody);
+                Log.Error(ex, "HTTP request to {ProxyUri} failed with status code {StatusCode}. Response body: {ResponseBody}", requestMessage.RequestUri, statusCode, responseBody);
                 httpContext.Response.StatusCode = (int)statusCode;
                 await httpContext.Response.WriteAsync(responseBody, cancellationToken: cancellationToken);
             }

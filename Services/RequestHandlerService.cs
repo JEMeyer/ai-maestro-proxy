@@ -12,7 +12,7 @@ namespace ai_maestro_proxy.Services
         private static readonly SemaphoreSlim semaphore = new(1, 1);
         private static readonly ConcurrentDictionary<string, ConcurrentQueue<RequestQueueItem>> queues = new();
 
-        public async Task<IActionResult> HandleRequest(string endpoint, RequestModel request, bool shouldCheckStream, string originalRequestBody, HttpContext httpContext, CancellationToken cancellationToken)
+        public async Task<IActionResult> HandleRequest(string endpoint, RequestModel request, HttpContext httpContext, CancellationToken cancellationToken)
         {
             Log.Information("Handling request for endpoint: {Endpoint}, Model: {Model}", endpoint, request.Model);
             string cacheKey = $"model:{request.Model}";
@@ -33,34 +33,44 @@ namespace ai_maestro_proxy.Services
                 return new StatusCodeResult(StatusCodes.Status500InternalServerError);
             }
 
-            using (GpuLock? gpuLock = TryAcquireGpus(assignmentList))
+            using (GpuLock? gpuLock = await TryAcquireGpus(assignmentList))
             {
                 if (gpuLock == null)
                 {
                     Log.Information("All GPUs are taken, adding request to queue for model: {Model}", request.Model);
-                    return await QueueRequest(request.Model, httpContext, originalRequestBody, shouldCheckStream, cancellationToken);
+                    return await QueueRequest(request, httpContext, cancellationToken);
                 }
 
                 Uri proxyUri = new($"http://{gpuLock.Assignment.Ip}:{gpuLock.Assignment.Port}/{endpoint}");
-                if (string.IsNullOrEmpty(originalRequestBody))
+                var jsonBody = new JObject
                 {
-                    return new BadRequestObjectResult("Request body is empty or invalid.");
-                }
+                    ["model"] = request.Model
+                };
 
-                JObject jsonBody = JObject.Parse(originalRequestBody);
-                jsonBody["model"] = request.Model;
-                if (shouldCheckStream)
+                if (endpoint.StartsWith("api/"))
                 {
+                    jsonBody["keep_alive"] = -1;
                     jsonBody["stream"] = request.Stream ?? true;
+                    Log.Information("Set keep_alive to -1 and stream to {Stream} for endpoint {Endpoint}", jsonBody["stream"], endpoint);
                 }
-                foreach (var kvp in request.AdditionalData)
-                {
-                    jsonBody[kvp.Key] = JToken.FromObject(kvp.Value);
-                }
-                string updatedRequestBody = jsonBody.ToString();
 
-                var requestMessage = proxiedRequestService.CreateProxiedRequestMessage(updatedRequestBody, proxyUri, httpContext);
-                await proxiedRequestService.SendProxiedRequest(requestMessage, proxyUri, httpContext, cancellationToken);
+                foreach (var kvp in request.AdditionalProperties)
+                {
+                    jsonBody[kvp.Key] = kvp.Value;
+                    Log.Information("Added property {Key} with value {Value} to request body", kvp.Key, kvp.Value);
+                }
+
+                var requestMessage = proxiedRequestService.CreateProxiedRequestMessage(jsonBody.ToString(), proxyUri, httpContext);
+
+                try
+                {
+                    await proxiedRequestService.SendProxiedRequest(requestMessage, httpContext, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error sending proxied request for model: {Model}", request.Model);
+                    return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+                }
             }
 
             // The GPU will be automatically unlocked when the GpuLock object is disposed at the end of the using block.
@@ -103,28 +113,45 @@ namespace ai_maestro_proxy.Services
             }
         }
 
-        private GpuLock? TryAcquireGpus(IEnumerable<Assignment> assignments)
+        private async Task<GpuLock?> TryAcquireGpus(IEnumerable<Assignment> assignments)
         {
-            foreach (var assignment in assignments)
+            await semaphore.WaitAsync();
+            try
             {
-                string[] gpuIds = assignment.GpuIds.Split(',');
-                if (gpuManagerService.TryLockGpus(gpuIds))
+                foreach (var assignment in assignments)
                 {
-                    return new GpuLock(gpuManagerService, assignment);
+                    string[] gpuIds = assignment.GpuIds.Split(',');
+                    if (gpuManagerService.TryLockGpus(gpuIds))
+                    {
+                        return new GpuLock(gpuManagerService, this, assignment);
+                    }
                 }
+                return null;
             }
-            return null;
+            finally
+            {
+                semaphore.Release();
+            }
         }
 
-
-        private static async Task<IActionResult> QueueRequest(string model, HttpContext context, string requestBody, bool shouldCheckStream, CancellationToken cancellationToken)
+        private static async Task<IActionResult> QueueRequest(RequestModel model, HttpContext context, CancellationToken cancellationToken)
         {
-            var queueItem = new RequestQueueItem(context, requestBody, shouldCheckStream, cancellationToken);
-            queues.GetOrAdd(model, _ => new ConcurrentQueue<RequestQueueItem>()).Enqueue(queueItem);
+            var queueItem = new RequestQueueItem(context, model, cancellationToken);
+            queues.GetOrAdd(model.Model, _ => new ConcurrentQueue<RequestQueueItem>()).Enqueue(queueItem);
             return await queueItem.CompletionSource.Task;
         }
 
-        private void ProcessQueue()
+        private async Task<IActionResult> HandleRequestFromQueue(RequestQueueItem queueItem)
+        {
+            return await HandleRequest(
+                queueItem.Context.Request.Path,
+                queueItem.Model,
+                queueItem.Context,
+                queueItem.CancellationToken
+            );
+        }
+
+        public void ProcessQueue()
         {
             foreach (var kvp in queues)
             {
@@ -147,20 +174,6 @@ namespace ai_maestro_proxy.Services
                     });
                 }
             }
-        }
-
-        private async Task<IActionResult> HandleRequestFromQueue(RequestQueueItem queueItem)
-        {
-            RequestModel? deserializedBody = JsonConvert.DeserializeObject<RequestModel>(queueItem.Body);
-            ArgumentNullException.ThrowIfNull(deserializedBody);
-            return await HandleRequest(
-                queueItem.Context.Request.Path,
-                deserializedBody,
-                queueItem.ShouldCheckStream,
-                queueItem.Body,
-                queueItem.Context,
-                queueItem.CancellationToken
-            );
         }
     }
 }

@@ -2,13 +2,14 @@ using ai_maestro_proxy.Services;
 
 namespace ai_maestro_proxy.Models
 {
-    public class GpuLock(GpuManagerService gpuManagerService, Assignment assignment) : IDisposable
+    public class GpuLock(GpuManagerService gpuManagerService, RequestHandlerService requestHandlerService, Assignment assignment) : IDisposable
     {
-        private readonly GpuManagerService _gpuManagerService = gpuManagerService ?? throw new ArgumentNullException(nameof(gpuManagerService));
-        private readonly Assignment _assignment = assignment ?? throw new ArgumentNullException(nameof(assignment));
-        private bool _disposed = false;
+        private readonly GpuManagerService gpuManagerService = gpuManagerService ?? throw new ArgumentNullException(nameof(gpuManagerService));
+        private readonly RequestHandlerService requestHandlerService = requestHandlerService ?? throw new ArgumentNullException(nameof(requestHandlerService));
+        private readonly Assignment assignment = assignment ?? throw new ArgumentNullException(nameof(assignment));
+        private bool disposed = false;
 
-        public Assignment Assignment => _assignment;
+        public Assignment Assignment => assignment;
 
         public void Dispose()
         {
@@ -18,13 +19,14 @@ namespace ai_maestro_proxy.Models
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (!disposed)
             {
                 if (disposing)
                 {
-                    _gpuManagerService.UnlockGpus(_assignment.GpuIds.Split(','));
+                    gpuManagerService.UnlockGpus(assignment.GpuIds.Split(','));
+                    requestHandlerService.ProcessQueue();
                 }
-                _disposed = true;
+                disposed = true;
             }
         }
     }
