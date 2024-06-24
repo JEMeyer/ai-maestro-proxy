@@ -1,8 +1,4 @@
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Serilog;
 
 namespace ai_maestro_proxy.Services
@@ -20,7 +16,7 @@ namespace ai_maestro_proxy.Services
 
             foreach (var header in httpContext.Request.Headers)
             {
-                requestMessage.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
+                requestMessage.Headers.TryAddWithoutValidation(header.Key, [.. header.Value]);
             }
 
             return requestMessage;

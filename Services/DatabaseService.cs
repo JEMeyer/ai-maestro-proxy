@@ -14,7 +14,6 @@ namespace ai_maestro_proxy.Services
 
             string query = @"
         SELECT
-            a.name,
             a.port,
             c.ip_addr AS ip,
             GROUP_CONCAT(DISTINCT g.id) AS gpuIds,

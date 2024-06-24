@@ -33,55 +33,39 @@ namespace ai_maestro_proxy.Services
                 return new StatusCodeResult(StatusCodes.Status500InternalServerError);
             }
 
-            Assignment? selectedAssignment = null;
-
-            await semaphore.WaitAsync(cancellationToken);
-            try
+            using (GpuLock? gpuLock = TryAcquireGpus(assignmentList))
             {
-                selectedAssignment = TryAcquireGpus(assignmentList);
-                if (selectedAssignment == null)
+                if (gpuLock == null)
                 {
                     Log.Information("All GPUs are taken, adding request to queue for model: {Model}", request.Model);
                     return await QueueRequest(request.Model, httpContext, originalRequestBody, shouldCheckStream, cancellationToken);
                 }
-            }
-            finally
-            {
-                semaphore.Release();
+
+                Uri proxyUri = new($"http://{gpuLock.Assignment.Ip}:{gpuLock.Assignment.Port}/{endpoint}");
+                if (string.IsNullOrEmpty(originalRequestBody))
+                {
+                    return new BadRequestObjectResult("Request body is empty or invalid.");
+                }
+
+                JObject jsonBody = JObject.Parse(originalRequestBody);
+                jsonBody["model"] = request.Model;
+                if (shouldCheckStream)
+                {
+                    jsonBody["stream"] = request.Stream ?? true;
+                }
+                foreach (var kvp in request.AdditionalData)
+                {
+                    jsonBody[kvp.Key] = JToken.FromObject(kvp.Value);
+                }
+                string updatedRequestBody = jsonBody.ToString();
+
+                var requestMessage = proxiedRequestService.CreateProxiedRequestMessage(updatedRequestBody, proxyUri, httpContext);
+                await proxiedRequestService.SendProxiedRequest(requestMessage, proxyUri, httpContext, cancellationToken);
             }
 
-            Uri proxyUri = new($"http://{selectedAssignment.Ip}:{selectedAssignment.Port}/{endpoint}");
-            if (string.IsNullOrEmpty(originalRequestBody))
-            {
-                return new BadRequestObjectResult("Request body is empty or invalid.");
-            }
-
-            JObject jsonBody = JObject.Parse(originalRequestBody);
-            jsonBody["model"] = request.Model;
-            if (shouldCheckStream)
-            {
-                jsonBody["stream"] = request.Stream ?? true;
-            }
-            foreach (var kvp in request.AdditionalData)
-            {
-                jsonBody[kvp.Key] = JToken.FromObject(kvp.Value);
-            }
-            string updatedRequestBody = jsonBody.ToString();
-
-            var requestMessage = proxiedRequestService.CreateProxiedRequestMessage(updatedRequestBody, proxyUri, httpContext);
-            await proxiedRequestService.SendProxiedRequest(requestMessage, proxyUri, httpContext, cancellationToken);
-
+            // The GPU will be automatically unlocked when the GpuLock object is disposed at the end of the using block.
             return new EmptyResult();
         }
-
-        private static Task<IActionResult> QueueRequest(string model, HttpContext context, string requestBody, bool shouldCheckStream, CancellationToken cancellationToken)
-        {
-            var queueItem = new RequestQueueItem(context, requestBody, shouldCheckStream, cancellationToken);
-            queues.GetOrAdd(model, _ => new ConcurrentQueue<RequestQueueItem>()).Enqueue(queueItem);
-            return queueItem.CompletionSource.Task;
-        }
-
-
 
         private async Task<IEnumerable<Assignment>> FetchAssignmentsAsync(string model, string cacheKey)
         {
@@ -119,17 +103,64 @@ namespace ai_maestro_proxy.Services
             }
         }
 
-        private Assignment? TryAcquireGpus(IEnumerable<Assignment> assignments)
+        private GpuLock? TryAcquireGpus(IEnumerable<Assignment> assignments)
         {
             foreach (var assignment in assignments)
             {
                 string[] gpuIds = assignment.GpuIds.Split(',');
                 if (gpuManagerService.TryLockGpus(gpuIds))
                 {
-                    return assignment;
+                    return new GpuLock(gpuManagerService, assignment);
                 }
             }
             return null;
+        }
+
+
+        private static async Task<IActionResult> QueueRequest(string model, HttpContext context, string requestBody, bool shouldCheckStream, CancellationToken cancellationToken)
+        {
+            var queueItem = new RequestQueueItem(context, requestBody, shouldCheckStream, cancellationToken);
+            queues.GetOrAdd(model, _ => new ConcurrentQueue<RequestQueueItem>()).Enqueue(queueItem);
+            return await queueItem.CompletionSource.Task;
+        }
+
+        private void ProcessQueue()
+        {
+            foreach (var kvp in queues)
+            {
+                if (kvp.Value.TryDequeue(out var queueItem))
+                {
+                    HandleRequestFromQueue(queueItem).ContinueWith(task =>
+                    {
+                        if (task.IsFaulted && task.Exception != null)
+                        {
+                            queueItem.CompletionSource.SetException(task.Exception);
+                        }
+                        else if (task.IsCanceled)
+                        {
+                            queueItem.CompletionSource.SetCanceled();
+                        }
+                        else
+                        {
+                            queueItem.CompletionSource.SetResult(task.Result);
+                        }
+                    });
+                }
+            }
+        }
+
+        private async Task<IActionResult> HandleRequestFromQueue(RequestQueueItem queueItem)
+        {
+            RequestModel? deserializedBody = JsonConvert.DeserializeObject<RequestModel>(queueItem.Body);
+            ArgumentNullException.ThrowIfNull(deserializedBody);
+            return await HandleRequest(
+                queueItem.Context.Request.Path,
+                deserializedBody,
+                queueItem.ShouldCheckStream,
+                queueItem.Body,
+                queueItem.Context,
+                queueItem.CancellationToken
+            );
         }
     }
 }

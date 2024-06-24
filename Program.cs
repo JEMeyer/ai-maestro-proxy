@@ -1,9 +1,7 @@
 using Serilog;
 
-
 namespace ai_maestro_proxy
 {
-
     public class Program
     {
         public static void Main(string[] args)
@@ -40,5 +38,4 @@ namespace ai_maestro_proxy
                     webBuilder.UseStartup<Startup>();
                 });
     }
-
 }
