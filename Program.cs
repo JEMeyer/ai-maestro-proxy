@@ -1,41 +1,110 @@
-using Serilog;
+using StackExchange.Redis;
+using MySql.Data.MySqlClient;
+using ai_maestro_proxy.Models;
+using ai_maestro_proxy.Services;
 
-namespace ai_maestro_proxy
+var builder = WebApplication.CreateBuilder(args);
+
+// Configure logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
+// Load Config values
+builder.Configuration
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddEnvironmentVariables();
+
+// Configure services
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? ""));
+builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
+builder.Services.AddSingleton<CacheService>();
+builder.Services.AddSingleton<DatabaseService>();
+builder.Services.AddSingleton<GpuManagerService>();
+builder.Services.AddHttpClient<ProxiedRequestService>();
+builder.Services.AddSingleton<HandlerService>();
+
+var app = builder.Build();
+
+app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
 {
-    public class Program
+    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
+
+    if (request is null)
     {
-        public static void Main(string[] args)
-        {
-            IConfigurationRoot configuration = new ConfigurationBuilder()
-                .AddJsonFile("appsettings.json")
-                .AddEnvironmentVariables()
-                .Build();
-
-            Log.Logger = new LoggerConfiguration()
-                .ReadFrom.Configuration(configuration)
-                .CreateLogger();
-
-            try
-            {
-                Log.Information("Starting up");
-                CreateHostBuilder(args).Build().Run();
-            }
-            catch (Exception ex)
-            {
-                Log.Fatal(ex, "Application start-up failed");
-            }
-            finally
-            {
-                Log.CloseAndFlush();
-            }
-        }
-
-        public static IHostBuilder CreateHostBuilder(string[] args) =>
-            Host.CreateDefaultBuilder(args)
-                .UseSerilog()
-                .ConfigureWebHostDefaults(webBuilder =>
-                {
-                    webBuilder.UseStartup<Startup>();
-                });
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsync("Invalid request.");
+        return;
     }
-}
+
+    await handlerService.HandleRequestAsync(context, request);
+});
+
+app.MapPost("/img2img", async (HttpContext context, HandlerService handlerService) =>
+{
+    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
+
+    if (request is null)
+    {
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsync("Invalid request.");
+        return;
+    }
+
+    await handlerService.HandleRequestAsync(context, request);
+});
+
+app.MapPost("/api/chat", async (HttpContext context, HandlerService handlerService) =>
+{
+    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
+
+    if (request is null)
+    {
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsync("Invalid request.");
+        return;
+    }
+
+    request.KeepAlive = -1;
+    request.Stream ??= true;
+
+    await handlerService.HandleRequestAsync(context, request);
+});
+
+app.MapPost("/api/generate", async (HttpContext context, HandlerService handlerService) =>
+{
+    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
+
+    if (request is null)
+    {
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsync("Invalid request.");
+        return;
+    }
+
+    request.KeepAlive = -1;
+    request.Stream ??= true;
+
+    await handlerService.HandleRequestAsync(context, request);
+});
+
+app.MapPost("/api/embeddings", async (HttpContext context, HandlerService handlerService) =>
+{
+    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
+
+    if (request is null)
+    {
+        context.Response.StatusCode = 400;
+        await context.Response.WriteAsync("Invalid request.");
+        return;
+    }
+
+    request.KeepAlive = -1;
+    request.Stream ??= true;
+
+    await handlerService.HandleRequestAsync(context, request);
+});
+
+app.Run();

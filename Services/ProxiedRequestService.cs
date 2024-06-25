@@ -1,63 +1,46 @@
 using System.Text;
-using Serilog;
+using System.Text.Json;
+using ai_maestro_proxy.Models;
 
 namespace ai_maestro_proxy.Services
 {
-    public class ProxiedRequestService(IHttpClientFactory httpClientFactory)
+    public class ProxiedRequestService(HttpClient httpClient)
     {
-        public HttpRequestMessage CreateProxiedRequestMessage(string updatedRequestBody, Uri proxyUri, HttpContext httpContext)
+        private readonly JsonSerializerOptions serializerOptions = new()
         {
-            var requestMessage = new HttpRequestMessage
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+        public async Task RouteRequestAsync(HttpContext context, RequestModel request, Assignment assignment, CancellationToken cancellationToken)
+        {
+            var requestUri = $"http://{assignment.Ip}:{assignment.Port}/api";
+
+            // Serialize the request model, including additional data
+            var requestBody = JsonSerializer.Serialize(request, serializerOptions);
+
+            var requestContent = new StringContent(requestBody, Encoding.UTF8, "application/json");
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri)
             {
-                Method = new HttpMethod(httpContext.Request.Method),
-                RequestUri = proxyUri,
-                Content = new StringContent(updatedRequestBody, Encoding.UTF8, "application/json")
+                Content = requestContent
             };
 
-            foreach (var header in httpContext.Request.Headers)
+            // Send the request and get the response
+            using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            response.EnsureSuccessStatusCode(); // Throw if not a success code.
+
+            // Check if the request has a 'stream' property
+            if (request.Stream.GetValueOrDefault())
             {
-                requestMessage.Headers.TryAddWithoutValidation(header.Key, [.. header.Value]);
+                // Stream the response back to the client
+                context.Response.ContentType = response.Content.Headers.ContentType?.ToString();
+                await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                await responseStream.CopyToAsync(context.Response.Body, cancellationToken);
             }
-
-            return requestMessage;
-        }
-
-        public async Task SendProxiedRequest(HttpRequestMessage requestMessage, HttpContext httpContext, CancellationToken cancellationToken)
-        {
-            HttpClient client = httpClientFactory.CreateClient();
-
-            HttpResponseMessage? responseMessage = null;
-            try
+            else
             {
-                Log.Information("Sending proxied request to {ProxyUri}", requestMessage.RequestUri);
-                responseMessage = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-
-                httpContext.Response.StatusCode = (int)responseMessage.StatusCode;
-                foreach (var header in responseMessage.Headers)
-                {
-                    httpContext.Response.Headers[header.Key] = header.Value.ToArray();
-                }
-
-                foreach (var header in responseMessage.Content.Headers)
-                {
-                    httpContext.Response.Headers[header.Key] = header.Value.ToArray();
-                }
-
-                httpContext.Response.Headers.Remove("transfer-encoding");
-                await responseMessage.Content.CopyToAsync(httpContext.Response.Body, cancellationToken);
-            }
-            catch (HttpRequestException ex) when (ex.InnerException is TaskCanceledException)
-            {
-                Log.Information("Request to {ProxyUri} was canceled.", requestMessage.RequestUri);
-                httpContext.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
-            }
-            catch (HttpRequestException ex)
-            {
-                var statusCode = responseMessage?.StatusCode ?? System.Net.HttpStatusCode.InternalServerError;
-                var responseBody = responseMessage != null ? await responseMessage.Content.ReadAsStringAsync(cancellationToken) : "No response body";
-                Log.Error(ex, "HTTP request to {ProxyUri} failed with status code {StatusCode}. Response body: {ResponseBody}", requestMessage.RequestUri, statusCode, responseBody);
-                httpContext.Response.StatusCode = (int)statusCode;
-                await httpContext.Response.WriteAsync(responseBody, cancellationToken: cancellationToken);
+                // Read the response content as a string and send it back
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                await context.Response.WriteAsync(responseContent, cancellationToken);
             }
         }
     }

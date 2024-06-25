@@ -1,28 +1,31 @@
+using System.Text.Json;
+using ai_maestro_proxy.Models;
 using StackExchange.Redis;
 
 namespace ai_maestro_proxy.Services
 {
-    public class CacheService(string connectionString)
+    public class CacheService(IConnectionMultiplexer redis)
     {
-        private readonly ConnectionMultiplexer _redis = ConnectionMultiplexer.Connect(connectionString);
-
-        public async Task<string> GetCachedValueAsync(string key)
+        public async Task CacheAssignmentsAsync(string modelName, IEnumerable<Assignment> assignments)
         {
-            IDatabase db = _redis.GetDatabase();
-            RedisValue value = await db.StringGetAsync(key);
-            return value.ToString() ?? string.Empty;
+            var db = redis.GetDatabase();
+            foreach (var assignment in assignments)
+            {
+                await db.StringSetAsync($"model-assignments:{modelName}", JsonSerializer.Serialize(assignment));
+            }
         }
 
-        public async Task SetCachedValueAsync(string key, string value, TimeSpan expiration)
+        public async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
         {
-            IDatabase db = _redis.GetDatabase();
-            await db.StringSetAsync(key, value, expiration);
-        }
+            var db = redis.GetDatabase();
+            var cacheKey = $"model-assignments:{modelName}";
 
-        public async Task ClearCachedValueAsync(string key)
-        {
-            IDatabase db = _redis.GetDatabase();
-            await db.KeyDeleteAsync(key);
+            var cachedAssignments = await db.StringGetAsync(cacheKey);
+            if (cachedAssignments.HasValue)
+            {
+                return JsonSerializer.Deserialize<IEnumerable<Assignment>>(cachedAssignments.ToString()) ?? new List<Assignment>();
+            }
+            return [];
         }
     }
 }
