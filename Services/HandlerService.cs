@@ -12,22 +12,15 @@ namespace ai_maestro_proxy.Services
 
             var gpuIds = assignment.GpuIds.Split(',');
 
-            if (gpuManagerService.TryLockGPUs(gpuIds))
+            try
             {
-                try
-                {
-                    var cancellationToken = context.RequestAborted;
-                    await proxiedRequestService.RouteRequestAsync(context, request, assignment, cancellationToken);
-                }
-                finally
-                {
-                    gpuManagerService.UnlockGPUs(gpuIds);
-                }
+                var cancellationToken = context.RequestAborted;
+                await proxiedRequestService.RouteRequestAsync(context, request, assignment, cancellationToken);
             }
-            else
+            finally
             {
-                context.Response.StatusCode = 503; // Service Unavailable
-                await context.Response.WriteAsync("GPUs are currently in use. Please try again later.");
+                gpuManagerService.UnlockGPUs(gpuIds);
+                await gpuManagerService.ProcessQueues();
             }
         }
     }

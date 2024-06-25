@@ -10,6 +10,22 @@ namespace ai_maestro_proxy.Services
         private readonly object _lockObject = new();
         private readonly ConcurrentDictionary<string, ConcurrentQueue<TaskCompletionSource<Assignment>>> _modelQueues = new();
 
+        private async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
+        {
+            // Try to get the assignment from the cache
+            var cachedAssignments = await cacheService.GetAssignmentsAsync(modelName);
+            if (cachedAssignments.Any()) { return cachedAssignments; }
+
+            var assignments = await databaseService.GetAssignmentsForModelAsync(modelName);
+            if (assignments.Any())
+            {
+                // Cache the result
+                await cacheService.CacheAssignmentsAsync(modelName, assignments);
+            }
+
+            return assignments;
+        }
+
         public bool TryLockGPUs(string[] gpuIds)
         {
             _logger.LogInformation("Attempting to lock : {GpuIds}", string.Join(", ", gpuIds));
@@ -42,11 +58,13 @@ namespace ai_maestro_proxy.Services
             }
         }
 
-        private async Task ProcessQueues()
+        public async Task ProcessQueues()
         {
             _logger.LogInformation("Processing Queues: {queues}", JsonSerializer.Serialize(_modelQueues));
             foreach (var modelQueue in _modelQueues)
             {
+                _logger.LogInformation("Processing queue");
+
                 var modelName = modelQueue.Key;
                 var queue = modelQueue.Value;
 
@@ -86,22 +104,6 @@ namespace ai_maestro_proxy.Services
                     _logger.LogInformation("Queue for model {modelName} is empty or unable to peek", modelName);
                 }
             }
-        }
-
-        private async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
-        {
-            // Try to get the assignment from the cache
-            var cachedAssignments = await cacheService.GetAssignmentsAsync(modelName);
-            if (cachedAssignments.Any()) { return cachedAssignments; }
-
-            var assignments = await databaseService.GetAssignmentsForModelAsync(modelName);
-            if (assignments.Any())
-            {
-                // Cache the result
-                await cacheService.CacheAssignmentsAsync(modelName, assignments);
-            }
-
-            return assignments;
         }
 
         public async Task<Assignment> GetAvailableAssignmentAsync(string modelName)
