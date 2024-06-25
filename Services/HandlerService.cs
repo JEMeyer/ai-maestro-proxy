@@ -9,13 +9,6 @@ namespace ai_maestro_proxy.Services
             _logger.LogInformation("Handling request for model: {Model}", request.Model);
             // Try to get an available assignment
             var assignment = await gpuManagerService.GetAvailableAssignmentAsync(request.Model);
-            if (assignment == null)
-            {
-                context.Response.StatusCode = 503; // Service Unavailable
-                await context.Response.WriteAsync("No assignments available. Please try again later.");
-                _logger.LogError("No assignments available for {Model}. Please try again later.", request.Model);
-                return;
-            }
 
             var gpuIds = assignment.GpuIds.Split(',');
 

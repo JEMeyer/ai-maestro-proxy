@@ -1,6 +1,7 @@
 using Dapper;
 using MySql.Data.MySqlClient;
 using ai_maestro_proxy.Models;
+using System.Text.Json;
 
 namespace ai_maestro_proxy.Services
 {
@@ -12,8 +13,7 @@ namespace ai_maestro_proxy.Services
                 SELECT
                     a.port,
                     c.ip_addr AS ip,
-                    GROUP_CONCAT(DISTINCT g.id) AS gpuIds,
-                    AVG(g.weight) AS avgGpuWeight
+                    GROUP_CONCAT(DISTINCT g.id) AS gpuIds
                 FROM
                     assignments a
                     JOIN assignment_gpus ag ON a.id = ag.assignment_id
@@ -24,9 +24,14 @@ namespace ai_maestro_proxy.Services
                 GROUP BY
                     a.id, a.port, c.ip_addr
                 ORDER BY
-                    avgGpuWeight DESC;";
+                    AVG(g.weight) DESC;";
 
-            return await dbConnection.QueryAsync<Assignment>(sql, new { ModelName = modelName });
+            var assignments = await dbConnection.QueryAsync<Assignment>(sql, new { ModelName = modelName });
+
+            var assignmentsList = assignments.ToList();
+            _logger.LogInformation("Assignments of length {assignmentsListCount} returned - assignments: {assignmentsList}", assignmentsList.Count, JsonSerializer.Serialize(assignmentsList));
+
+            return assignmentsList;
         }
     }
 }

@@ -13,7 +13,7 @@ namespace ai_maestro_proxy.Models
         public bool? Stream { get; set; }
 
         [JsonExtensionData]
-        public Dictionary<string, JsonElement> AdditionalData { get; set; } = new();
+        public Dictionary<string, JsonElement> AdditionalData { get; set; } = [];
     }
 }
 
