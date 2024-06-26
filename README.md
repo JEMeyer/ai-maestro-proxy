@@ -8,7 +8,7 @@ AI Maestro Proxy can be used in various AI applications where multiple models ar
 
 ### Local Development
 
-For environment variable management, the project uses an `.env` file that contains connection strings for MariaDB and Redis. When running the application locally with `dotnet run`, you will need to provide real values for these variables. To streamline this process, there are two scripts available - `run.sh` for Linux/MacOS systems and `run.ps1` for Windows users. These scripts take the variables from your `.env` file and add them to the computer's environment variables before executing `dotnet run`. This approach ensures that the necessary configuration settings are in place for running the application locally as well as having it use the same method for docker environment variable setting.
+For environment variable management, the project uses an `.env` file that contains connection strings for MariaDB and Redis. When running the application locally with `dotnet run`, you will need to provide real values for these variables. To streamline this process, there are two scripts available - `run.sh` for Linux/MacOS systems and `run.ps1` for Windows users. These scripts take the variables from your `.env` file and add them to the computer's environment variables before executing `dotnet run`. This approach ensures that the necessary configuration settings are in place for running the application locally as well as having it use the same method for docker environment variable setting. The port for local development will be `5000`, not the `8080` for production builds.
 
 ### Docker Run
 
