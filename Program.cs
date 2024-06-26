@@ -22,7 +22,7 @@ builder.Services.AddLogging(loggingBuilder =>
     loggingBuilder.AddConsole(options => options.FormatterName = "custom");
     loggingBuilder.AddConsoleFormatter<CustomConsoleFormatter, ConsoleFormatterOptions>();
 });
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? ""));
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")));
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();

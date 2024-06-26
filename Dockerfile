@@ -1,34 +1,27 @@
-# syntax=docker/dockerfile:1
-
-# Stage 1: Build the Go application
-FROM golang:1.22-bullseye AS builder
-
-# Set the Current Working Directory inside the container
+# Stage 1: Build the .NET application
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
-# Copy go mod and sum files
-COPY go.mod go.sum ./
+# Copy csproj and restore as distinct layers
+COPY *.csproj ./
+RUN dotnet restore
 
-# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
-RUN go mod download
+# Copy everything else and build
+COPY . ./
+RUN dotnet publish -c Release -o out
 
-# Copy the source from the current directory to the Working Directory inside the container
-COPY . .
-
-# Build the Go app
-RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+# List the files in the out directory for debugging purposes
+RUN ls -la out
 
 # Stage 2: Create a minimal image for the final executable
-FROM alpine:latest
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
 
-# Set the Current Working Directory inside the container
-WORKDIR /root/
-
-# Copy the Pre-built binary file from the previous stage
-COPY --from=builder /app/main .
+# Copy the build output from the previous stage
+COPY --from=build /app/out .
 
 # Expose port 8080 to the outside world
 EXPOSE 8080
 
-# Run the executable
-CMD ["./main"]
+# Debugging entrypoint to print environment variables and run the app
+ENTRYPOINT ["dotnet", "ai-maestro-proxy.dll"]

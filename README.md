@@ -6,6 +6,10 @@ AI Maestro Proxy is a versatile application designed to manage and distribute re
 ## Usage:
 AI Maestro Proxy can be used in various AI applications where multiple models are available for processing different tasks. By pointing your AI calls to this server, you can easily manage which model handles each request based on its availability. The system is designed to handle two primary types of requests: diffusion and Ollama.
 
+### Local Development
+
+For environment variable management, the project uses an `.env` file that contains connection strings for MariaDB and Redis. When running the application locally with `dotnet run`, you will need to provide real values for these variables. To streamline this process, there are two scripts available - `run.sh` for Linux/MacOS systems and `run.ps1` for Windows users. These scripts take the variables from your `.env` file and add them to the computer's environment variables before executing `dotnet run`. This approach ensures that the necessary configuration settings are in place for running the application locally as well as having it use the same method for docker environment variable setting.
+
 ### Docker Run
 
 Ports are configured with standard docker flags. `.env` file is used to pass connection strings for MariaDB and Redis (ConnectionStrings__MariaDb and ConnectionStrings__Redis) - see .env.template for more info.
@@ -13,10 +17,10 @@ Ports are configured with standard docker flags. `.env` file is used to pass con
 To use the most recent image, pull the `latest` tag:
 
 ```bash
-docker run --env-file=.env -p 5000:5000 ghcr.io/jemeyer/ai-maestro-proxy:latest
+docker run --env-file=.env -p 8080:8080 ghcr.io/jemeyer/ai-maestro-proxy:latest
 ```
 
-This will start the server and make it accessible at <http://localhost:5000>.
+This will start the server and make it accessible at <http://localhost:8080>.
 
 ### Docker Compose
 
@@ -27,12 +31,12 @@ services:
   ai-maestro-proxy:
     image: ghcr.io/jemeyer/ai-maestro-proxy:latest
     ports:
-      - "5000:5000"
+      - "8080:8080"
     env_file:
       - .env
 ```
 
-This configuration will start a container using the latest image and make it accessible at <http://localhost:5000>. It will read the .env file for environment variables.
+This configuration will start a container using the latest image and make it accessible at <http://localhost:8080>. It will read the .env file for environment variables.
 
 ## Handling Diffusion Requests:
 Diffusion requests involve image-related tasks such as text-to-image or image-to-image generation. To use AI Maestro Proxy for diffusion requests, clients should send a POST request to the following endpoints on the proxy server:
