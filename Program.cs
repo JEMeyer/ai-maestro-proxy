@@ -3,6 +3,7 @@ using MySql.Data.MySqlClient;
 using ai_maestro_proxy.Models;
 using ai_maestro_proxy.Services;
 using ai_maestro_proxy.Middleware;
+using Microsoft.Extensions.Logging.Console;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +15,13 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 // Configure services
-builder.Services.AddLogging();
+builder.Services.AddLogging(loggingBuilder =>
+{
+    loggingBuilder.ClearProviders();
+    loggingBuilder.AddConfiguration(builder.Configuration.GetSection("Logging"));
+    loggingBuilder.AddConsole(options => options.FormatterName = "custom");
+    loggingBuilder.AddConsoleFormatter<CustomConsoleFormatter, ConsoleFormatterOptions>();
+});
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? ""));
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
 builder.Services.AddSingleton<CacheService>();
@@ -24,7 +31,7 @@ builder.Services.AddHttpClient<ProxiedRequestService>();
 builder.Services.AddSingleton<HandlerService>();
 
 var app = builder.Build();
-app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
 {

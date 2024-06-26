@@ -118,9 +118,7 @@ namespace ai_maestro_proxy.Services
             var assignments = await GetAssignmentsAsync(modelName);
             _logger.LogInformation("Fetched assignments for model {modelName}: {assignments}", modelName, JsonSerializer.Serialize(assignments));
 
-            Assignment? foundAssignment = null;
-
-            while (foundAssignment == null)
+            while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -134,8 +132,7 @@ namespace ai_maestro_proxy.Services
                         if (TryLockGPUs(gpuIds))
                         {
                             _logger.LogInformation("GPUs {GpuIds} reserved, returning assignment.", string.Join(',', gpuIds));
-                            foundAssignment = assignment;
-                            break;
+                            return assignment;
                         }
                         else
                         {
@@ -148,8 +145,6 @@ namespace ai_maestro_proxy.Services
                 _gpusFreedEvent.Wait(cancellationToken);
                 _gpusFreedEvent.Reset(); // Reset the event to wait for the next change
             }
-
-            return foundAssignment;
         }
     }
 }
