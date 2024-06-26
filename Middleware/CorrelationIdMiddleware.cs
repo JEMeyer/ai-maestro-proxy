@@ -17,8 +17,11 @@ namespace ai_maestro_proxy.Middleware
 
             using (logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
             {
-                // Log the correlation ID at the start of the request
-                logger.LogInformation("Starting request with Correlation ID: {CorrelationId}", correlationId);
+                // Log the correlation ID and request path at the start of the request
+                var requestPath = context.Request.Path.ToString();
+                var requestId = context.TraceIdentifier;
+
+                logger.LogInformation("Starting request with Correlation ID: {CorrelationId}, Request Path: {RequestPath}, Request ID: {RequestId}", correlationId, requestPath, requestId);
 
                 await next(context);
             }

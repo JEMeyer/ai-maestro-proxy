@@ -1,47 +1,53 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using ai_maestro_proxy.Models;
 
 namespace ai_maestro_proxy.Services
 {
-    public class ProxiedRequestService(HttpClient httpClient)
+    public class ProxiedRequestService(HttpClient httpClient, ILogger<ProxiedRequestService> _logger)
     {
         private readonly JsonSerializerOptions serializerOptions = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
-        public async Task RouteRequestAsync(HttpContext context, RequestModel request, Assignment assignment, CancellationToken cancellationToken)
+
+        public async ValueTask RouteRequestAsync(HttpContext context, RequestModel request, Assignment assignment)
         {
-            var requestUri = $"http://{assignment.Ip}:{assignment.Port}/api";
+            _logger.LogInformation("Starting to route a request with IP: {Ip}, Port: {Port}", assignment.Ip, assignment.Port);
+            var stopWatch = Stopwatch.StartNew();
+            var path = context.Request.Path.ToString();
+            var queryString = context.Request.QueryString.ToString();
+            var requestUri = $"http://{assignment.Ip}:{assignment.Port}{path}{queryString}";
 
-            // Serialize the request model, including additional data
-            var requestBody = JsonSerializer.Serialize(request, serializerOptions);
-
-            var requestContent = new StringContent(requestBody, Encoding.UTF8, "application/json");
+            _logger.LogDebug("The constructed request URI is: {Uri}", requestUri);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri)
             {
-                Content = requestContent
+                Content = new StringContent(JsonSerializer.Serialize(request, serializerOptions), Encoding.UTF8, "application/json")
             };
 
+            _logger.LogInformation("Sending request to {RequestUri} with headers {Headers}", requestUri, JsonSerializer.Serialize(httpRequest.Headers));
+            _logger.LogInformation("The request has taken  {ElapsedMicroseconds} μs to proxy.", stopWatch.Elapsed.Microseconds);
             // Send the request and get the response
-            using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode(); // Throw if not a success code.
+            using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted).ConfigureAwait(false);
+            _logger.LogDebug("Received a response with status code: {StatusCode}", response.StatusCode);
 
-            // Check if the request has a 'stream' property
+            response.EnsureSuccessStatusCode();
+
             if (request.Stream.GetValueOrDefault())
             {
-                // Stream the response back to the client
                 context.Response.ContentType = response.Content.Headers.ContentType?.ToString();
-                await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                await responseStream.CopyToAsync(context.Response.Body, cancellationToken);
+                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
+                await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
             }
             else
             {
-                // Read the response content as a string and send it back
-                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                await context.Response.WriteAsync(responseContent, cancellationToken);
+                var responseContent = await response.Content.ReadAsStringAsync(context.RequestAborted);
+                await context.Response.WriteAsync(responseContent, context.RequestAborted);
             }
+
+            _logger.LogInformation("Response successfully proxied to client. Total request time {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
         }
     }
 }

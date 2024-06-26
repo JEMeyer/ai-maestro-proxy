@@ -6,11 +6,6 @@ using ai_maestro_proxy.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure logging
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
-builder.Logging.AddDebug();
-
 // Load Config values
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -19,6 +14,7 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 // Configure services
+builder.Services.AddLogging();
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? ""));
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
 builder.Services.AddSingleton<CacheService>();

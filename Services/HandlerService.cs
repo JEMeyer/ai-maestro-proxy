@@ -8,19 +8,18 @@ namespace ai_maestro_proxy.Services
         {
             _logger.LogInformation("Handling request for model: {Model}", request.Model);
             // Try to get an available assignment
-            var assignment = await gpuManagerService.GetAvailableAssignmentAsync(request.Model);
+            var assignment = await gpuManagerService.GetAvailableAssignmentAsync(request.Model, context.RequestAborted);
+            ArgumentNullException.ThrowIfNull(assignment);
 
             var gpuIds = assignment.GpuIds.Split(',');
 
             try
             {
-                var cancellationToken = context.RequestAborted;
-                await proxiedRequestService.RouteRequestAsync(context, request, assignment, cancellationToken);
+                await proxiedRequestService.RouteRequestAsync(context, request, assignment);
             }
             finally
             {
                 gpuManagerService.UnlockGPUs(gpuIds);
-                await gpuManagerService.ProcessQueues();
             }
         }
     }
