@@ -1,6 +1,5 @@
 using StackExchange.Redis;
 using MySql.Data.MySqlClient;
-using ai_maestro_proxy.Models;
 using ai_maestro_proxy.Services;
 using ai_maestro_proxy.Middleware;
 using Microsoft.Extensions.Logging.Console;
@@ -36,81 +35,27 @@ app.UseMiddleware<TraceIdLoggingMiddleware>();
 
 app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
 {
-    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
-
-    if (request is null)
-    {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid request.");
-        return;
-    }
-
-    await handlerService.HandleRequestAsync(context, request);
+    await handlerService.HandleDiffusionRequestAsync(context);
 });
 
 app.MapPost("/img2img", async (HttpContext context, HandlerService handlerService) =>
 {
-    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
-
-    if (request is null)
-    {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid request.");
-        return;
-    }
-
-    await handlerService.HandleRequestAsync(context, request);
+    await handlerService.HandleDiffusionRequestAsync(context);
 });
 
 app.MapPost("/api/chat", async (HttpContext context, HandlerService handlerService) =>
 {
-    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
-
-    if (request is null)
-    {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid request.");
-        return;
-    }
-
-    request.KeepAlive = -1;
-    request.Stream ??= true;
-
-    await handlerService.HandleRequestAsync(context, request);
+    await handlerService.HandleOllamaRequestAsync(context);
 });
 
 app.MapPost("/api/generate", async (HttpContext context, HandlerService handlerService) =>
 {
-    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
-
-    if (request is null)
-    {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid request.");
-        return;
-    }
-
-    request.KeepAlive = -1;
-    request.Stream ??= true;
-
-    await handlerService.HandleRequestAsync(context, request);
+    await handlerService.HandleOllamaRequestAsync(context);
 });
 
 app.MapPost("/api/embeddings", async (HttpContext context, HandlerService handlerService) =>
 {
-    var request = await context.Request.ReadFromJsonAsync<RequestModel>();
-
-    if (request is null)
-    {
-        context.Response.StatusCode = 400;
-        await context.Response.WriteAsync("Invalid request.");
-        return;
-    }
-
-    request.KeepAlive = -1;
-    request.Stream ??= true;
-
-    await handlerService.HandleRequestAsync(context, request);
+    await handlerService.HandleOllamaRequestAsync(context);
 });
 
 app.Run();

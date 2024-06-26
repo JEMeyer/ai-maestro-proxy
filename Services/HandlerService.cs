@@ -4,6 +4,12 @@ namespace ai_maestro_proxy.Services
 {
     public class HandlerService(GpuManagerService gpuManagerService, ProxiedRequestService proxiedRequestService, ILogger<HandlerService> _logger)
     {
+        public static async Task<RequestModel> ParseRequestModelFromContext(HttpContext context)
+        {
+            var request = await context.Request.ReadFromJsonAsync<RequestModel>() ?? throw new ArgumentException("Invalid request.");
+            return request;
+        }
+
         public async Task HandleRequestAsync(HttpContext context, RequestModel request)
         {
             _logger.LogInformation("Handling request for model: {Model}", request.Model);
@@ -21,6 +27,21 @@ namespace ai_maestro_proxy.Services
             {
                 gpuManagerService.UnlockGPUs(gpuIds);
             }
+        }
+
+        public async Task HandleOllamaRequestAsync(HttpContext context)
+        {
+            var request = await ParseRequestModelFromContext(context);
+
+            request.KeepAlive = -1;
+            request.Stream ??= true;
+
+            await HandleRequestAsync(context, request);
+        }
+
+        public async Task HandleDiffusionRequestAsync(HttpContext context)
+        {
+            await HandleRequestAsync(context, await ParseRequestModelFromContext(context));
         }
     }
 }
