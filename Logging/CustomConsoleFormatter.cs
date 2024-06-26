@@ -1,8 +1,13 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Logging.Console;
 
-namespace ai_maestro_proxy.Middleware
+namespace ai_maestro_proxy.Logging
 {
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging.Console;
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+
     public class CustomConsoleFormatter : ConsoleFormatter
     {
         public CustomConsoleFormatter() : base("custom") { }
@@ -13,33 +18,62 @@ namespace ai_maestro_proxy.Middleware
             var message = logEntry.Formatter(logEntry.State, logEntry.Exception);
             var logLevelString = GetLogLevelString(logLevel);
             var logLevelColor = GetLogLevelColor(logLevel);
+            var traceIdentifierColor = "\u001b[36m"; // Cyan
+            var requestPathColor = "\u001b[97m"; // Bright White
 
             textWriter.Write(logLevelColor);
             textWriter.Write(logLevelString);
             textWriter.Write(": ");
             textWriter.Write("\u001b[0m"); // Reset color
 
-            var scopeWritten = false;
+            var traceIdentifier = "N/A";
+            var requestPath = "N/A";
 
             scopeProvider?.ForEachScope((scope, state) =>
                 {
                     if (scope is IEnumerable<KeyValuePair<string, object>> dictionary)
                     {
-                        if (!scopeWritten)
+                        foreach (var item in dictionary)
                         {
-                            foreach (var item in dictionary)
+                            if (item.Key == "TraceIdentifier")
                             {
-                                if (item.Key == "TraceIdentifier" || item.Key == "RequestPath")
-                                {
-                                    textWriter.Write($"{item.Key}: {item.Value} ");
-                                }
+                                traceIdentifier = item.Value?.ToString() ?? "N/A";
                             }
-                            scopeWritten = true; // Ensure scope is written only once
+                            else if (item.Key == "RequestPath")
+                            {
+                                requestPath = item.Value?.ToString() ?? "N/A";
+                            }
                         }
                     }
                 }, logEntry);
 
-            textWriter.WriteLine(message);
+            if (traceIdentifier == "N/A" && requestPath == "N/A")
+            {
+                textWriter.Write(traceIdentifierColor);
+                textWriter.Write("[GLOBAL] ");
+                textWriter.Write("\u001b[0m"); // Reset color
+            }
+            else
+            {
+                textWriter.Write(traceIdentifierColor);
+                textWriter.Write($"TraceIdentifier: {traceIdentifier} ");
+                textWriter.Write("\u001b[0m"); // Reset color
+
+                textWriter.Write(requestPathColor);
+                textWriter.Write($"RequestPath: {requestPath} ");
+                textWriter.Write("\u001b[0m"); // Reset color
+            }
+
+            // Check for the color marker in the message and apply color if found
+            if (message.Contains("##COLOR##"))
+            {
+                message = message.Replace("##COLOR##", "\u001b[93m"); // Apply yellow color to the message
+                textWriter.WriteLine(message + "\u001b[0m"); // Reset color
+            }
+            else
+            {
+                textWriter.WriteLine(message);
+            }
         }
 
         private static string GetLogLevelString(LogLevel logLevel)
@@ -70,4 +104,5 @@ namespace ai_maestro_proxy.Middleware
             };
         }
     }
+
 }

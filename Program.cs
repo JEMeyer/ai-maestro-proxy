@@ -4,6 +4,7 @@ using ai_maestro_proxy.Models;
 using ai_maestro_proxy.Services;
 using ai_maestro_proxy.Middleware;
 using Microsoft.Extensions.Logging.Console;
+using ai_maestro_proxy.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +32,7 @@ builder.Services.AddHttpClient<ProxiedRequestService>();
 builder.Services.AddSingleton<HandlerService>();
 
 var app = builder.Build();
-app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<TraceIdLoggingMiddleware>();
 
 app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
 {

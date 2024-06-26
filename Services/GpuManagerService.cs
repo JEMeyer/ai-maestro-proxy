@@ -54,7 +54,7 @@ namespace ai_maestro_proxy.Services
                 var assignments = await _databaseService.GetAssignmentsForModelAsync(modelName);
                 if (assignments.Any())
                 {
-                    _logger.LogInformation("Caching assignments for model: {modelName}", modelName);
+                    _logger.LogInformation("Found assignments for model: {modelName}, saving to cache.", modelName);
                     await _cacheService.CacheAssignmentsAsync(modelName, assignments);
                 }
 
@@ -71,7 +71,7 @@ namespace ai_maestro_proxy.Services
         {
             try
             {
-                _logger.LogInformation("Attempting to lock : {GpuIds}", string.Join(", ", gpuIds));
+                _logger.LogInformation("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
                 var db = _redis.GetDatabase();
                 var unlocked = gpuIds.All(gpuId =>
                         {
@@ -116,7 +116,6 @@ namespace ai_maestro_proxy.Services
         public async Task<Assignment?> GetAvailableAssignmentAsync(string modelName, CancellationToken cancellationToken)
         {
             var assignments = await GetAssignmentsAsync(modelName);
-            _logger.LogInformation("Fetched assignments for model {modelName}: {assignments}", modelName, JsonSerializer.Serialize(assignments));
 
             while (true)
             {
@@ -127,8 +126,6 @@ namespace ai_maestro_proxy.Services
                     foreach (var assignment in assignments)
                     {
                         var gpuIds = assignment.GpuIds.Split(',');
-                        _logger.LogInformation("Attempting to lock GPUs: {GpuIds}", string.Join(',', gpuIds));
-
                         if (TryLockGPUs(gpuIds))
                         {
                             _logger.LogInformation("GPUs {GpuIds} reserved, returning assignment.", string.Join(',', gpuIds));

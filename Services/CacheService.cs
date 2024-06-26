@@ -34,6 +34,7 @@ namespace ai_maestro_proxy.Services
                 {
                     _logger.LogError(ex, "Error deserializing assignments from cache - removing item from cache.");
                     await db.KeyDeleteAsync(cacheKey); // Delete the corrupted cache entry
+                    return [];
                 }
             }
 
