@@ -5,5 +5,4 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
-# Run the Go application
-go run main.go
+dotnet run

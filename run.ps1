@@ -8,5 +8,4 @@ if (Test-Path .env) {
     }
 }
 
-# Run the Go application
-go run main.go
+dotnet run
