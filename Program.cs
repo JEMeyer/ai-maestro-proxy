@@ -16,23 +16,6 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
 
-var allowedCorsOrigins = builder.Configuration.GetSection("AllowedCorsOrigins").Get<string[]>() ?? [];
-var ignoreCors = builder.Configuration.GetValue<bool>("IgnoreCors");
-
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(builder =>
-    {
-        builder.SetIsOriginAllowed(origin =>
-            {
-                return allowedCorsOrigins.Contains(origin) || ignoreCors;
-            })
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
-    });
-});
-
 // Configure services
 builder.Services.AddLogging(loggingBuilder =>
 {
