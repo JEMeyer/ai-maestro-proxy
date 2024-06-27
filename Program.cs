@@ -1,11 +1,14 @@
 using StackExchange.Redis;
 using MySql.Data.MySqlClient;
-using ai_maestro_proxy.Services;
-using ai_maestro_proxy.Middleware;
+using AIMaestroProxy.Services;
+using AIMaestroProxy.Middleware;
 using Microsoft.Extensions.Logging.Console;
-using ai_maestro_proxy.Logging;
+using AIMaestroProxy.Logging;
+using AIMaestroProxy.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
+
+Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
 
 // Load Config values
 builder.Configuration
@@ -13,6 +16,20 @@ builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
+
+// Read CORS origins from configuration
+var corsOrigins = builder.Configuration.GetSection("AllowedCorsOrigins").Get<string[]>() ?? [];
+
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(builder =>
+    {
+        builder.WithOrigins(corsOrigins)
+               .AllowAnyHeader()
+               .AllowAnyMethod()
+               .AllowCredentials();
+    });
+});
 
 // Configure services
 builder.Services.AddLogging(loggingBuilder =>
@@ -22,15 +39,27 @@ builder.Services.AddLogging(loggingBuilder =>
     loggingBuilder.AddConsole(options => options.FormatterName = "custom");
     loggingBuilder.AddConsoleFormatter<CustomConsoleFormatter, ConsoleFormatterOptions>();
 });
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis")));
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+ArgumentException.ThrowIfNullOrWhiteSpace(redisConnectionString);
+
+// Add Singleton services
+builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<GpuManagerService>();
-builder.Services.AddHttpClient<ProxiedRequestService>();
 builder.Services.AddSingleton<HandlerService>();
+builder.Services.AddSingleton<RedisSubscriberService>();
+
+// HttpClient is transient by default
+builder.Services.AddHttpClient<ProxiedRequestService>();
+
+// Add SignalR services (SignalR infrastructure is singleton, Hubs are scoped)
+builder.Services.AddSignalR();
 
 var app = builder.Build();
+app.UseRouting();
+app.UseCors();
 app.UseMiddleware<TraceIdLoggingMiddleware>();
 
 app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
@@ -57,5 +86,8 @@ app.MapPost("/api/embeddings", async (HttpContext context, HandlerService handle
 {
     await handlerService.HandleOllamaRequestAsync(context);
 });
+
+// Map the SignalR hub
+app.MapHub<RedisHub>("/redisHub");
 
 app.Run();

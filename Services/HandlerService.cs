@@ -1,6 +1,6 @@
-using ai_maestro_proxy.Models;
+using AIMaestroProxy.Models;
 
-namespace ai_maestro_proxy.Services
+namespace AIMaestroProxy.Services
 {
     public class HandlerService(GpuManagerService gpuManagerService, ProxiedRequestService proxiedRequestService, ILogger<HandlerService> _logger)
     {
@@ -12,7 +12,7 @@ namespace ai_maestro_proxy.Services
 
         public async Task HandleRequestAsync(HttpContext context, RequestModel request)
         {
-            _logger.LogInformation("Handling request for model: {Model}", request.Model);
+            _logger.LogDebug("Handling request for model: {Model}", request.Model);
             // Try to get an available assignment
             var assignment = await gpuManagerService.GetAvailableAssignmentAsync(request.Model, context.RequestAborted);
             ArgumentNullException.ThrowIfNull(assignment);

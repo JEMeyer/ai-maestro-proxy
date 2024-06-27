@@ -1,4 +1,4 @@
-namespace ai_maestro_proxy.Middleware
+namespace AIMaestroProxy.Middleware
 {
     public class TraceIdLoggingMiddleware(RequestDelegate next, ILogger<TraceIdLoggingMiddleware> _logger)
     {

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace ai_maestro_proxy.Logging
+namespace AIMaestroProxy.Logging
 {
     using Microsoft.Extensions.Logging;
     using Microsoft.Extensions.Logging.Console;

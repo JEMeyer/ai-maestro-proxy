@@ -1,8 +1,8 @@
 using System.Text.Json;
-using ai_maestro_proxy.Models;
+using AIMaestroProxy.Models;
 using StackExchange.Redis;
 
-namespace ai_maestro_proxy.Services
+namespace AIMaestroProxy.Services
 {
     public class GpuManagerService
     {
@@ -29,7 +29,7 @@ namespace ai_maestro_proxy.Services
         {
             _subscriber.Subscribe(NewGpuAvailableChannel, (channel, message) =>
             {
-                _logger.LogInformation("Setting the reset event to free queued threads");
+                _logger.LogDebug("Setting the reset event to free queued threads");
                 _gpusFreedEvent.Set();
             });
         }
@@ -38,18 +38,18 @@ namespace ai_maestro_proxy.Services
         {
             try
             {
-                _logger.LogInformation("Getting assignments for model: {modelName}", modelName);
+                _logger.LogDebug("Getting assignments for model: {modelName}", modelName);
                 var cachedAssignments = await _cacheService.GetAssignmentsAsync(modelName);
                 if (cachedAssignments.Any())
                 {
-                    _logger.LogInformation("Found cached assignments for model: {modelName}", modelName);
+                    _logger.LogDebug("Found cached assignments for model: {modelName}", modelName);
                     return cachedAssignments;
                 }
 
                 var assignments = await _databaseService.GetAssignmentsForModelAsync(modelName);
                 if (assignments.Any())
                 {
-                    _logger.LogInformation("Found assignments for model: {modelName}, saving to cache.", modelName);
+                    _logger.LogDebug("Found assignments for model: {modelName}, saving to cache.", modelName);
                     await _cacheService.CacheAssignmentsAsync(modelName, assignments);
                 }
 
@@ -66,18 +66,18 @@ namespace ai_maestro_proxy.Services
         {
             try
             {
-                _logger.LogInformation("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
+                _logger.LogDebug("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
                 var db = _redis.GetDatabase();
                 var unlocked = gpuIds.All(gpuId =>
                         {
                             var value = db.StringGet($"gpu-lock:{gpuId}");
                             bool isUnlocked = value.IsNull || value == (RedisValue)false;
-                            _logger.LogInformation("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
+                            _logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
                             return isUnlocked;
                         });
                 if (unlocked)
                 {
-                    _logger.LogInformation("Locking gpus : {GpuIds}", string.Join(", ", gpuIds));
+                    _logger.LogDebug("Locking gpus : {GpuIds}", string.Join(", ", gpuIds));
                     foreach (var gpuId in gpuIds)
                     {
                         db.StringSet($"gpu-lock:{gpuId}", true);
@@ -86,7 +86,7 @@ namespace ai_maestro_proxy.Services
                     _subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
                     return true;
                 }
-                _logger.LogInformation("Failed to lock : {GpuIds}", string.Join(", ", gpuIds));
+                _logger.LogWarning("Failed to lock : {GpuIds}", string.Join(", ", gpuIds));
                 return false;
             }
             catch (Exception ex)
@@ -100,7 +100,7 @@ namespace ai_maestro_proxy.Services
         {
             lock (_lockObject)
             {
-                _logger.LogInformation("Unlocking gpus  : {GpuIds}", string.Join(", ", gpuIds));
+                _logger.LogDebug("Unlocking gpus  : {GpuIds}", string.Join(", ", gpuIds));
                 var db = _redis.GetDatabase();
                 foreach (var gpuId in gpuIds)
                 {
@@ -127,12 +127,12 @@ namespace ai_maestro_proxy.Services
                         var gpuIds = assignment.GpuIds.Split(',');
                         if (TryLockGPUs(gpuIds))
                         {
-                            _logger.LogInformation("GPUs {GpuIds} reserved, returning assignment.", string.Join(',', gpuIds));
+                            _logger.LogDebug("GPUs {GpuIds} reserved, returning assignment.", string.Join(',', gpuIds));
                             return assignment;
                         }
                         else
                         {
-                            _logger.LogInformation("Failed to lock GPUs: {GpuIds}", string.Join(',', gpuIds));
+                            _logger.LogWarning("Failed to lock GPUs: {GpuIds}", string.Join(',', gpuIds));
                         }
                     }
                 }

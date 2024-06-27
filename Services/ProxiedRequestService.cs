@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using ai_maestro_proxy.Models;
+using AIMaestroProxy.Models;
 
-namespace ai_maestro_proxy.Services
+namespace AIMaestroProxy.Services
 {
     public class ProxiedRequestService(HttpClient httpClient, ILogger<ProxiedRequestService> _logger)
     {
@@ -14,7 +14,7 @@ namespace ai_maestro_proxy.Services
 
         public async ValueTask RouteRequestAsync(HttpContext context, RequestModel request, Assignment assignment)
         {
-            _logger.LogInformation("Starting to route a request to IP: {Ip}, Port: {Port}", assignment.Ip, assignment.Port);
+            _logger.LogDebug("Starting to route a request to IP: {Ip}, Port: {Port}", assignment.Ip, assignment.Port);
             var stopWatch = Stopwatch.StartNew();
             var path = context.Request.Path.ToString();
             var queryString = context.Request.QueryString.ToString();
@@ -29,7 +29,7 @@ namespace ai_maestro_proxy.Services
 
             try
             {
-                _logger.LogInformation("##COLOR##The request has taken  {ElapsedMicroseconds} μs to proxy.", stopWatch.Elapsed.Microseconds);
+                _logger.LogDebug("##COLOR##The request has taken  {ElapsedMicroseconds} μs to proxy.", stopWatch.Elapsed.Microseconds);
                 // Send the request and get the response
                 using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted).ConfigureAwait(false);
                 _logger.LogDebug("Received a response with status code: {StatusCode}", response.StatusCode);
@@ -48,11 +48,11 @@ namespace ai_maestro_proxy.Services
                     await context.Response.WriteAsync(responseContent, context.RequestAborted);
                 }
 
-                _logger.LogInformation("##COLOR##Response successfully proxied to client. Total request time {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
+                _logger.LogDebug("##COLOR##Response successfully proxied to client. Total request time {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogInformation("##COLOR##Request was cancelled after {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
+                _logger.LogDebug("##COLOR##Request was cancelled after {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
                 throw; // Re-throw the exception to propagate the cancellation
             }
         }

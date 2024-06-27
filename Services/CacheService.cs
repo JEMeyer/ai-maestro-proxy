@@ -1,8 +1,8 @@
 using System.Text.Json;
-using ai_maestro_proxy.Models;
+using AIMaestroProxy.Models;
 using StackExchange.Redis;
 
-namespace ai_maestro_proxy.Services
+namespace AIMaestroProxy.Services
 {
     public class CacheService(IConnectionMultiplexer redis, ILogger<DatabaseService> _logger)
     {
@@ -12,7 +12,7 @@ namespace ai_maestro_proxy.Services
             var cacheKey = $"model-assignments:{modelName}";
 
             var serializedAssignments = JsonSerializer.Serialize(assignments);
-            _logger.LogInformation($"Storing serialized assignments to cache: {serializedAssignments}");
+            _logger.LogDebug("Storing serialized assignments to cache: {serializedAssignments}", serializedAssignments);
 
             await db.StringSetAsync(cacheKey, serializedAssignments);
         }
@@ -27,7 +27,7 @@ namespace ai_maestro_proxy.Services
                 try
                 {
                     var assignments = JsonSerializer.Deserialize<IEnumerable<Assignment>>(cachedAssignments.ToString());
-                    _logger.LogInformation("Retrieved assignments from cache: {assignments}", JsonSerializer.Serialize(assignments));
+                    _logger.LogDebug("Retrieved assignments from cache: {assignments}", JsonSerializer.Serialize(assignments));
                     return assignments ?? [];
                 }
                 catch (JsonException ex)

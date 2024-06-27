@@ -1,5 +1,3 @@
-@ai_maestro_proxy_HostAddress = http://localhost:5079
-
 ###
 ### Generate an image with sdxl-turbo
 POST {{baseProxyUrl}}:{{proxyPort}}/txt2img

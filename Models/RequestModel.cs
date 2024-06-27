@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ai_maestro_proxy.Models
+namespace AIMaestroProxy.Models
 {
     public class RequestModel
     {
