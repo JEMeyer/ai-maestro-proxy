@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ai_maestro_proxy.Models;
 using StackExchange.Redis;
 
@@ -13,6 +14,7 @@ namespace ai_maestro_proxy.Services
         private readonly object _lockObject = new();
         private readonly ManualResetEventSlim _gpusFreedEvent = new(false);
         private static readonly RedisChannel NewGpuAvailableChannel = RedisChannel.Literal("gpu-now-free-channel");
+        private static readonly RedisChannel GpuLockChangesChannel = RedisChannel.Literal("gpu-lock-changes");
 
         public GpuManagerService(DatabaseService databaseService, CacheService cacheService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
         {
@@ -30,12 +32,6 @@ namespace ai_maestro_proxy.Services
                 _logger.LogInformation("Setting the reset event to free queued threads");
                 _gpusFreedEvent.Set();
             });
-        }
-
-        private void PublishNewGpusAvailableNotification(string[] gpuIds)
-        {
-            _logger.LogInformation("Publishing to GPU Available Channel");
-            _subscriber.Publish(NewGpuAvailableChannel, $"GPU(s) {gpuIds} freed");
         }
 
         private async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
@@ -86,6 +82,8 @@ namespace ai_maestro_proxy.Services
                     {
                         db.StringSet($"gpu-lock:{gpuId}", true);
                     }
+                    var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "1");
+                    _subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
                     return true;
                 }
                 _logger.LogInformation("Failed to lock : {GpuIds}", string.Join(", ", gpuIds));
@@ -108,7 +106,9 @@ namespace ai_maestro_proxy.Services
                 {
                     db.StringSet($"gpu-lock:{gpuId}", false);
                 }
-                PublishNewGpusAvailableNotification(gpuIds);
+                _subscriber.Publish(NewGpuAvailableChannel, $"GPU(s) {gpuIds} freed");
+                var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "0");
+                _subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
             }
         }
 
