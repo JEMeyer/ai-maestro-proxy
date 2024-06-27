@@ -42,8 +42,6 @@ builder.Services.AddHttpClient<ProxiedRequestService>();
 builder.Services.AddSignalR();
 
 var app = builder.Build();
-app.UseRouting();
-app.UseCors();
 app.UseMiddleware<TraceIdLoggingMiddleware>();
 
 app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
