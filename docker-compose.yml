@@ -2,6 +2,6 @@ services:
   ai-maestro-proxy:
     image: ghcr.io/jemeyer/ai-maestro-proxy:latest
     ports:
-      - "8080:8080"
+      - "80:80"
     env_file:
       - .env
