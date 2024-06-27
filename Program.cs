@@ -4,7 +4,6 @@ using AIMaestroProxy.Services;
 using AIMaestroProxy.Middleware;
 using Microsoft.Extensions.Logging.Console;
 using AIMaestroProxy.Logging;
-using AIMaestroProxy.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,7 +48,6 @@ builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<GpuManagerService>();
 builder.Services.AddSingleton<HandlerService>();
-builder.Services.AddSingleton<RedisSubscriberService>();
 
 // HttpClient is transient by default
 builder.Services.AddHttpClient<ProxiedRequestService>();
@@ -86,8 +84,5 @@ app.MapPost("/api/embeddings", async (HttpContext context, HandlerService handle
 {
     await handlerService.HandleOllamaRequestAsync(context);
 });
-
-// Map the SignalR hub
-app.MapHub<RedisHub>("/redisHub");
 
 app.Run();
