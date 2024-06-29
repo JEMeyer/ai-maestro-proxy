@@ -46,6 +46,8 @@ app.UseMiddleware<TraceIdLoggingMiddleware>();
 app.UseMiddleware<StopwatchMiddleware>();
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
+app.MapGet("/", () => "Ollama is running.");
+
 app.MapPost("/txt2img", async (HttpContext context, ComputeHandler handlerService) =>
 {
     await handlerService.HandleDiffusionComputeRequestAsync(context);
