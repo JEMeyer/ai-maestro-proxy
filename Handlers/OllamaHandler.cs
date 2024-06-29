@@ -1,10 +1,9 @@
-using System.Diagnostics;
 using System.Text.Json;
 using AIMaestroProxy.Services;
 
 namespace AIMaestroProxy.Handlers
 {
-    public class OllamaHandler(DataService dataService, ILogger<OllamaHandler> logger)
+    public class OllamaHandler(DataService dataService, ILogger<OllamaHandler> logger, GpuManagerService gpuManagerService, ProxiedRequestService proxiedRequestService)
     {
         public async Task HandleTagsRequestAsync(HttpContext context)
         {
@@ -35,6 +34,28 @@ namespace AIMaestroProxy.Handlers
 
             // Write the JSON data to the response stream using the WriteAsync() method
             await context.Response.WriteAsync(concatenatedModels);
+        }
+
+        public async Task HandleShowRequestAsync(HttpContext context)
+        {
+            var request = await ComputeHandler.ParseRequestModelFromContext(context);
+
+            logger.LogDebug("Handling /show request for model: {Model}", request.Name);
+            // Try to get an available model modelAssignment
+            ArgumentNullException.ThrowIfNull(request.Name);
+            var modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(request.Name, context.RequestAborted);
+            ArgumentNullException.ThrowIfNull(modelAssignment);
+
+            var gpuIds = modelAssignment.GpuIds.Split(',');
+
+            try
+            {
+                await proxiedRequestService.RouteRequestAsync(context, request, modelAssignment);
+            }
+            finally
+            {
+                gpuManagerService.UnlockGPUs(gpuIds);
+            }
         }
     }
 }

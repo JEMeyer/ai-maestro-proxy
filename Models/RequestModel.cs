@@ -5,7 +5,9 @@ namespace AIMaestroProxy.Models
 {
     public class RequestModel
     {
-        public required string Model { get; set; }
+        public string? Name { get; set; }
+
+        public string? Model { get; set; }
 
         [JsonPropertyName("keep_alive")]
         public int? KeepAlive { get; set; }

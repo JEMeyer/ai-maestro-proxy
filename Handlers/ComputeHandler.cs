@@ -5,7 +5,7 @@ namespace AIMaestroProxy.Handlers
 {
     public class ComputeHandler(GpuManagerService gpuManagerService, ProxiedRequestService proxiedRequestService, ILogger<ComputeHandler> logger)
     {
-        private static async Task<RequestModel> ParseRequestModelFromContext(HttpContext context)
+        internal static async Task<RequestModel> ParseRequestModelFromContext(HttpContext context)
         {
             var request = await context.Request.ReadFromJsonAsync<RequestModel>() ?? throw new ArgumentException("Invalid request.");
             return request;
@@ -15,6 +15,7 @@ namespace AIMaestroProxy.Handlers
         {
             logger.LogDebug("Handling request for model: {Model}", request.Model);
             // Try to get an available model modelAssignment
+            ArgumentNullException.ThrowIfNull(request.Model);
             var modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(request.Model, context.RequestAborted);
             ArgumentNullException.ThrowIfNull(modelAssignment);
 

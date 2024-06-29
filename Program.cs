@@ -46,7 +46,18 @@ app.UseMiddleware<TraceIdLoggingMiddleware>();
 app.UseMiddleware<StopwatchMiddleware>();
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
-app.MapGet("/", () => "Ollama is running.");
+app.MapGet("/", (HttpContext context) => "Ollama is running.");
+
+app.MapGet("/version", (HttpContext context, IConfiguration configuration) =>
+{
+    var version = configuration["Maestro:OllamaVersion"];
+    return Results.Ok(new { version });
+});
+
+app.MapPost("/api/show", async (HttpContext context, OllamaHandler handlerService) =>
+{
+    await handlerService.HandleShowRequestAsync(context);
+});
 
 app.MapPost("/txt2img", async (HttpContext context, ComputeHandler handlerService) =>
 {
