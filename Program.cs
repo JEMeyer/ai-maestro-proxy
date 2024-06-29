@@ -1,11 +1,10 @@
-using StackExchange.Redis;
-using MySql.Data.MySqlClient;
-using AIMaestroProxy.Services;
-using AIMaestroProxy.Middleware;
-using Microsoft.Extensions.Logging.Console;
-using AIMaestroProxy.Logging;
-using System.Diagnostics;
 using AIMaestroProxy.Handlers;
+using AIMaestroProxy.Logging;
+using AIMaestroProxy.Middleware;
+using AIMaestroProxy.Services;
+using Microsoft.Extensions.Logging.Console;
+using MySql.Data.MySqlClient;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,7 +44,7 @@ builder.Services.AddHttpClient<ProxiedRequestService>();
 var app = builder.Build();
 app.UseMiddleware<TraceIdLoggingMiddleware>();
 app.UseMiddleware<StopwatchMiddleware>();
-
+app.UseMiddleware<NotFoundLoggingMiddleware>();
 
 app.MapPost("/txt2img", async (HttpContext context, ComputeHandler handlerService) =>
 {

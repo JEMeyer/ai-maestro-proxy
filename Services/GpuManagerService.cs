@@ -33,34 +33,6 @@ namespace AIMaestroProxy.Services
             });
         }
 
-        private async Task<IEnumerable<ModelAssignment>> GetModelAssignmentsAsync(string modelName)
-        {
-            try
-            {
-                logger.LogDebug("Getting modelAssignments for model: {modelName}", modelName);
-                var cachedModelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
-                if (cachedModelAssignments.Any())
-                {
-                    logger.LogDebug("Found cached modelAssignments for model: {modelName}", modelName);
-                    return cachedModelAssignments;
-                }
-
-                var modelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
-                if (modelAssignments.Any())
-                {
-                    logger.LogDebug("Found modelAssignments for model: {modelName}, saving to cache.", modelName);
-                    await dataService.CacheModelAssignmentsAsync(modelName, modelAssignments);
-                }
-
-                return modelAssignments;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error in GetModelAssignmentsAsync for model {modelName}", modelName);
-                throw;
-            }
-        }
-
         public bool TryLockGPUs(string[] gpuIds)
         {
             try
@@ -113,7 +85,7 @@ namespace AIMaestroProxy.Services
 
         public async Task<ModelAssignment?> GetAvailableModelAssignmentAsync(string modelName, CancellationToken cancellationToken)
         {
-            var modelAssignments = await GetModelAssignmentsAsync(modelName);
+            var modelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
 
             while (true)
             {
