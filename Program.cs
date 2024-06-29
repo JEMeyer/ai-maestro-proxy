@@ -48,7 +48,7 @@ app.UseMiddleware<NotFoundLoggingMiddleware>();
 
 app.MapGet("/", (HttpContext context) => "Ollama is running.");
 
-app.MapGet("/version", (HttpContext context, IConfiguration configuration) =>
+app.MapGet("/api/version", (HttpContext context, IConfiguration configuration) =>
 {
     var version = configuration["Maestro:OllamaVersion"];
     return Results.Ok(new { version });
