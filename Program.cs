@@ -42,8 +42,18 @@ builder.Services.AddSingleton<GpuManagerService>();
 builder.Services.AddHttpClient<ProxiedRequestService>();
 
 var app = builder.Build();
+
+// Middleware to handle errors globally
+app.UseMiddleware<ErrorHandlingMiddleware>();
+
+// Middleware to log request trace ID and handle stopwatch
 app.UseMiddleware<TraceIdLoggingMiddleware>();
 app.UseMiddleware<StopwatchMiddleware>();
+
+// Middleware to remove chunked transfer encoding header
+app.UseMiddleware<RemoveChunkedTransferEncodingMiddleware>();
+
+// Middleware to handle not found responses
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
 app.MapGet("/", (HttpContext context) => "Ollama is running.");
@@ -87,6 +97,56 @@ app.MapPost("/api/embeddings", async (HttpContext context, ComputeHandler handle
 app.MapGet("/api/tags", async (HttpContext context, OllamaHandler ollamaHandler) =>
 {
     await ollamaHandler.HandleTagsRequestAsync(context);
+});
+
+// Stub out remaining endpoints
+
+app.MapPost("/api/pull", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("PullModelHandler endpoint hit");
+});
+
+app.MapPost("/api/create", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("CreateModelHandler endpoint hit");
+});
+
+app.MapPost("/api/push", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("PushModelHandler endpoint hit");
+});
+
+app.MapPost("/api/copy", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("CopyModelHandler endpoint hit");
+});
+
+app.MapDelete("/api/delete", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("DeleteModelHandler endpoint hit");
+});
+
+app.MapPost("/api/blobs/:digest", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("CreateBlobHandler endpoint hit");
+});
+
+app.MapGet("/api/ps", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("ProcessHandler endpoint hit");
+});
+
+app.MapPost("/v1/chat/completions", async (HttpContext context) =>
+{
+    // Stub implementation
+    await context.Response.WriteAsync("ChatHandler (v1/chat/completions) endpoint hit");
 });
 
 app.Run();
