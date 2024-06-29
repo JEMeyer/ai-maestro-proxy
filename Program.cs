@@ -35,7 +35,6 @@ builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.Ge
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<DataService>();
-builder.Services.AddSingleton<Stopwatch>((_) => Stopwatch.StartNew());
 builder.Services.AddSingleton<OllamaHandler>();
 builder.Services.AddSingleton<ComputeHandler>();
 builder.Services.AddSingleton<GpuManagerService>();
@@ -45,6 +44,8 @@ builder.Services.AddHttpClient<ProxiedRequestService>();
 
 var app = builder.Build();
 app.UseMiddleware<TraceIdLoggingMiddleware>();
+app.UseMiddleware<StopwatchMiddleware>();
+
 
 app.MapPost("/txt2img", async (HttpContext context, ComputeHandler handlerService) =>
 {
