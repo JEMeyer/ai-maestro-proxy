@@ -4,35 +4,36 @@ using StackExchange.Redis;
 
 namespace AIMaestroProxy.Services
 {
-    public class CacheService(IConnectionMultiplexer redis, ILogger<DatabaseService> _logger)
+    public class CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
     {
-        public async Task CacheAssignmentsAsync(string modelName, IEnumerable<Assignment> assignments)
+        public async Task CacheModelAssignmentsAsync(string modelName, IEnumerable<ModelAssignment> modelAssignments)
         {
             var db = redis.GetDatabase();
             var cacheKey = $"model-assignments:{modelName}";
 
-            var serializedAssignments = JsonSerializer.Serialize(assignments);
-            _logger.LogDebug("Storing serialized assignments to cache: {serializedAssignments}", serializedAssignments);
+            var serializedModelAssignments = JsonSerializer.Serialize(modelAssignments);
+            logger.LogDebug("Storing serialized modelAssignments to cache: {serializedModelAssignments}", serializedModelAssignments);
 
-            await db.StringSetAsync(cacheKey, serializedAssignments);
+            await db.StringSetAsync(cacheKey, serializedModelAssignments);
         }
-        public async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
+
+        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentsAsync(string modelName)
         {
             var db = redis.GetDatabase();
             var cacheKey = $"model-assignments:{modelName}";
 
-            var cachedAssignments = await db.StringGetAsync(cacheKey);
-            if (cachedAssignments.HasValue)
+            var cachedModelAssignments = await db.StringGetAsync(cacheKey);
+            if (cachedModelAssignments.HasValue)
             {
                 try
                 {
-                    var assignments = JsonSerializer.Deserialize<IEnumerable<Assignment>>(cachedAssignments.ToString());
-                    _logger.LogDebug("Retrieved assignments from cache: {assignments}", JsonSerializer.Serialize(assignments));
-                    return assignments ?? [];
+                    var modelAssignments = JsonSerializer.Deserialize<IEnumerable<ModelAssignment>>(cachedModelAssignments.ToString());
+                    logger.LogDebug("Retrieved modelAssignments from cache: {modelAssignments}", JsonSerializer.Serialize(modelAssignments));
+                    return modelAssignments ?? [];
                 }
                 catch (JsonException ex)
                 {
-                    _logger.LogError(ex, "Error deserializing assignments from cache - removing item from cache.");
+                    logger.LogError(ex, "Error deserializing modelAssignments from cache - removing item from cache.");
                     await db.KeyDeleteAsync(cacheKey); // Delete the corrupted cache entry
                     return [];
                 }

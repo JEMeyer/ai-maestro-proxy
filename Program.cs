@@ -4,6 +4,8 @@ using AIMaestroProxy.Services;
 using AIMaestroProxy.Middleware;
 using Microsoft.Extensions.Logging.Console;
 using AIMaestroProxy.Logging;
+using System.Diagnostics;
+using AIMaestroProxy.Handlers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,41 +34,46 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Conn
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();
+builder.Services.AddSingleton<DataService>();
+builder.Services.AddSingleton<Stopwatch>((_) => Stopwatch.StartNew());
+builder.Services.AddSingleton<OllamaHandler>();
+builder.Services.AddSingleton<ComputeHandler>();
 builder.Services.AddSingleton<GpuManagerService>();
-builder.Services.AddSingleton<HandlerService>();
 
 // HttpClient is transient by default
 builder.Services.AddHttpClient<ProxiedRequestService>();
 
-// Add SignalR services (SignalR infrastructure is singleton, Hubs are scoped)
-builder.Services.AddSignalR();
-
 var app = builder.Build();
 app.UseMiddleware<TraceIdLoggingMiddleware>();
 
-app.MapPost("/txt2img", async (HttpContext context, HandlerService handlerService) =>
+app.MapPost("/txt2img", async (HttpContext context, ComputeHandler handlerService) =>
 {
-    await handlerService.HandleDiffusionRequestAsync(context);
+    await handlerService.HandleDiffusionComputeRequestAsync(context);
 });
 
-app.MapPost("/img2img", async (HttpContext context, HandlerService handlerService) =>
+app.MapPost("/img2img", async (HttpContext context, ComputeHandler handlerService) =>
 {
-    await handlerService.HandleDiffusionRequestAsync(context);
+    await handlerService.HandleDiffusionComputeRequestAsync(context);
 });
 
-app.MapPost("/api/chat", async (HttpContext context, HandlerService handlerService) =>
+app.MapPost("/api/chat", async (HttpContext context, ComputeHandler handlerService) =>
 {
-    await handlerService.HandleOllamaRequestAsync(context);
+    await handlerService.HandleOllamaComputeRequestAsync(context);
 });
 
-app.MapPost("/api/generate", async (HttpContext context, HandlerService handlerService) =>
+app.MapPost("/api/generate", async (HttpContext context, ComputeHandler handlerService) =>
 {
-    await handlerService.HandleOllamaRequestAsync(context);
+    await handlerService.HandleOllamaComputeRequestAsync(context);
 });
 
-app.MapPost("/api/embeddings", async (HttpContext context, HandlerService handlerService) =>
+app.MapPost("/api/embeddings", async (HttpContext context, ComputeHandler handlerService) =>
 {
-    await handlerService.HandleOllamaRequestAsync(context);
+    await handlerService.HandleOllamaComputeRequestAsync(context);
+});
+
+app.MapGet("/api/tags", async (HttpContext context, OllamaHandler ollamaHandler) =>
+{
+    await ollamaHandler.HandleTagsRequestAsync(context);
 });
 
 app.Run();

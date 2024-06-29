@@ -1,9 +1,10 @@
 namespace AIMaestroProxy.Models
 {
-    public class Assignment
+    public class ModelAssignment
     {
-        public required string Ip { get; set; }
         public int Port { get; set; }
+        public required string Name { get; set; }
+        public required string Ip { get; set; }
         public required string GpuIds { get; set; }
     }
 }

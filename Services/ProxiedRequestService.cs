@@ -5,22 +5,21 @@ using AIMaestroProxy.Models;
 
 namespace AIMaestroProxy.Services
 {
-    public class ProxiedRequestService(HttpClient httpClient, ILogger<ProxiedRequestService> _logger)
+    public class ProxiedRequestService(HttpClient httpClient, ILogger<ProxiedRequestService> logger, Stopwatch stopwatch)
     {
         private readonly JsonSerializerOptions serializerOptions = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
-        public async ValueTask RouteRequestAsync(HttpContext context, RequestModel request, Assignment assignment)
+        public async ValueTask RouteRequestAsync(HttpContext context, RequestModel request, ModelAssignment modelAssignment)
         {
-            _logger.LogDebug("Starting to route a request to IP: {Ip}, Port: {Port}", assignment.Ip, assignment.Port);
-            var stopWatch = Stopwatch.StartNew();
+            logger.LogDebug("Starting to route a request to IP: {Ip}, Port: {Port}", modelAssignment.Ip, modelAssignment.Port);
             var path = context.Request.Path.ToString();
             var queryString = context.Request.QueryString.ToString();
-            var requestUri = $"http://{assignment.Ip}:{assignment.Port}{path}{queryString}";
+            var requestUri = $"http://{modelAssignment.Ip}:{modelAssignment.Port}{path}{queryString}";
 
-            _logger.LogDebug("The constructed request URI is: {Uri}", requestUri);
+            logger.LogDebug("The constructed request URI is: {Uri}", requestUri);
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri)
             {
@@ -29,10 +28,10 @@ namespace AIMaestroProxy.Services
 
             try
             {
-                _logger.LogDebug("##COLOR##The request has taken  {ElapsedMicroseconds} μs to proxy.", stopWatch.Elapsed.Microseconds);
+                logger.LogDebug("##COLOR##The request has taken  {ElapsedMicroseconds} μs to proxy.", stopwatch.Elapsed.Microseconds);
                 // Send the request and get the response
                 using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted).ConfigureAwait(false);
-                _logger.LogDebug("Received a response with status code: {StatusCode}", response.StatusCode);
+                logger.LogDebug("Received a response with status code: {StatusCode}", response.StatusCode);
 
                 response.EnsureSuccessStatusCode();
 
@@ -48,11 +47,11 @@ namespace AIMaestroProxy.Services
                     await context.Response.WriteAsync(responseContent, context.RequestAborted);
                 }
 
-                _logger.LogDebug("##COLOR##Response successfully proxied to client. Total request time {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
+                logger.LogDebug("##COLOR##Response successfully proxied to client. Total request time {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogDebug("##COLOR##Request was cancelled after {ElapsedMilliseconds} ms", stopWatch.ElapsedMilliseconds);
+                logger.LogDebug("##COLOR##Request was cancelled after {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
                 throw; // Re-throw the exception to propagate the cancellation
             }
         }

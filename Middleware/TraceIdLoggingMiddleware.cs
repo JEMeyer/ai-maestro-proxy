@@ -1,12 +1,12 @@
 namespace AIMaestroProxy.Middleware
 {
-    public class TraceIdLoggingMiddleware(RequestDelegate next, ILogger<TraceIdLoggingMiddleware> _logger)
+    public class TraceIdLoggingMiddleware(RequestDelegate next, ILogger<TraceIdLoggingMiddleware> logger)
     {
         public async Task InvokeAsync(HttpContext context)
         {
             var traceIdentifier = context.TraceIdentifier;
 
-            using (_logger.BeginScope(new Dictionary<string, object>
+            using (logger.BeginScope(new Dictionary<string, object>
             {
                 ["TraceIdentifier"] = traceIdentifier
             }))

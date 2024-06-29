@@ -6,58 +6,57 @@ namespace AIMaestroProxy.Services
 {
     public class GpuManagerService
     {
-        private readonly DatabaseService _databaseService;
-        private readonly CacheService _cacheService;
-        private readonly IConnectionMultiplexer _redis;
-        private readonly ILogger<GpuManagerService> _logger;
-        private readonly ISubscriber _subscriber;
-        private readonly object _lockObject = new();
-        private readonly ManualResetEventSlim _gpusFreedEvent = new(false);
+        private readonly DataService dataService;
+        private readonly IConnectionMultiplexer redis;
+        private readonly ILogger<GpuManagerService> logger;
+        private readonly ISubscriber subscriber;
+        private readonly object lockObject = new();
+        private readonly ManualResetEventSlim gpusFreedEvent = new(false);
         private static readonly RedisChannel NewGpuAvailableChannel = RedisChannel.Literal("gpu-now-free-channel");
         private static readonly RedisChannel GpuLockChangesChannel = RedisChannel.Literal("gpu-lock-changes");
 
-        public GpuManagerService(DatabaseService databaseService, CacheService cacheService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
+        public GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
         {
-            _databaseService = databaseService;
-            _cacheService = cacheService;
-            _redis = redis;
-            _logger = logger;
-            _subscriber = redis.GetSubscriber();
+            this.dataService = dataService;
+            this.redis = redis;
+            this.logger = logger;
+            subscriber = redis.GetSubscriber();
             SubscribeToNewGpuAvailableNotifications();
         }
+
         private void SubscribeToNewGpuAvailableNotifications()
         {
-            _subscriber.Subscribe(NewGpuAvailableChannel, (channel, message) =>
+            subscriber.Subscribe(NewGpuAvailableChannel, (channel, message) =>
             {
-                _logger.LogDebug("Setting the reset event to free queued threads");
-                _gpusFreedEvent.Set();
+                logger.LogDebug("Setting the reset event to free queued threads");
+                gpusFreedEvent.Set();
             });
         }
 
-        private async Task<IEnumerable<Assignment>> GetAssignmentsAsync(string modelName)
+        private async Task<IEnumerable<ModelAssignment>> GetModelAssignmentsAsync(string modelName)
         {
             try
             {
-                _logger.LogDebug("Getting assignments for model: {modelName}", modelName);
-                var cachedAssignments = await _cacheService.GetAssignmentsAsync(modelName);
-                if (cachedAssignments.Any())
+                logger.LogDebug("Getting modelAssignments for model: {modelName}", modelName);
+                var cachedModelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
+                if (cachedModelAssignments.Any())
                 {
-                    _logger.LogDebug("Found cached assignments for model: {modelName}", modelName);
-                    return cachedAssignments;
+                    logger.LogDebug("Found cached modelAssignments for model: {modelName}", modelName);
+                    return cachedModelAssignments;
                 }
 
-                var assignments = await _databaseService.GetAssignmentsForModelAsync(modelName);
-                if (assignments.Any())
+                var modelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
+                if (modelAssignments.Any())
                 {
-                    _logger.LogDebug("Found assignments for model: {modelName}, saving to cache.", modelName);
-                    await _cacheService.CacheAssignmentsAsync(modelName, assignments);
+                    logger.LogDebug("Found modelAssignments for model: {modelName}, saving to cache.", modelName);
+                    await dataService.CacheModelAssignmentsAsync(modelName, modelAssignments);
                 }
 
-                return assignments;
+                return modelAssignments;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetAssignmentsAsync for model {modelName}", modelName);
+                logger.LogError(ex, "Error in GetModelAssignmentsAsync for model {modelName}", modelName);
                 throw;
             }
         }
@@ -66,80 +65,80 @@ namespace AIMaestroProxy.Services
         {
             try
             {
-                _logger.LogDebug("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
-                var db = _redis.GetDatabase();
+                logger.LogDebug("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
+                var db = redis.GetDatabase();
                 var unlocked = gpuIds.All(gpuId =>
                         {
                             var value = db.StringGet($"gpu-lock:{gpuId}");
                             bool isUnlocked = value.IsNull || value == (RedisValue)false;
-                            _logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
+                            logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
                             return isUnlocked;
                         });
                 if (unlocked)
                 {
-                    _logger.LogDebug("Locking gpus : {GpuIds}", string.Join(", ", gpuIds));
+                    logger.LogDebug("Locking gpus : {GpuIds}", string.Join(", ", gpuIds));
                     foreach (var gpuId in gpuIds)
                     {
                         db.StringSet($"gpu-lock:{gpuId}", true);
                     }
                     var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "1");
-                    _subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
+                    subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
                     return true;
                 }
-                _logger.LogWarning("Failed to lock : {GpuIds}", string.Join(", ", gpuIds));
+                logger.LogWarning("Failed to lock : {GpuIds}", string.Join(", ", gpuIds));
                 return false;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in TryLockGPUs for GPUs {GpuIds}", string.Join(", ", gpuIds));
+                logger.LogError(ex, "Error in TryLockGPUs for GPUs {GpuIds}", string.Join(", ", gpuIds));
                 throw;
             }
         }
 
         public void UnlockGPUs(string[] gpuIds)
         {
-            lock (_lockObject)
+            lock (lockObject)
             {
-                _logger.LogDebug("Unlocking gpus  : {GpuIds}", string.Join(", ", gpuIds));
-                var db = _redis.GetDatabase();
+                logger.LogDebug("Unlocking gpus  : {GpuIds}", string.Join(", ", gpuIds));
+                var db = redis.GetDatabase();
                 foreach (var gpuId in gpuIds)
                 {
                     db.StringSet($"gpu-lock:{gpuId}", false);
                 }
-                _subscriber.Publish(NewGpuAvailableChannel, $"GPU(s) {gpuIds} freed");
+                subscriber.Publish(NewGpuAvailableChannel, $"GPU(s) {gpuIds} freed");
                 var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "0");
-                _subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
+                subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
             }
         }
 
-        public async Task<Assignment?> GetAvailableAssignmentAsync(string modelName, CancellationToken cancellationToken)
+        public async Task<ModelAssignment?> GetAvailableModelAssignmentAsync(string modelName, CancellationToken cancellationToken)
         {
-            var assignments = await GetAssignmentsAsync(modelName);
+            var modelAssignments = await GetModelAssignmentsAsync(modelName);
 
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                lock (_lockObject)
+                lock (lockObject)
                 {
-                    foreach (var assignment in assignments)
+                    foreach (var modelAssignment in modelAssignments)
                     {
-                        var gpuIds = assignment.GpuIds.Split(',');
+                        var gpuIds = modelAssignment.GpuIds.Split(',');
                         if (TryLockGPUs(gpuIds))
                         {
-                            _logger.LogDebug("GPUs {GpuIds} reserved, returning assignment.", string.Join(',', gpuIds));
-                            return assignment;
+                            logger.LogDebug("GPUs {GpuIds} reserved, returning modelAssignments.", string.Join(',', gpuIds));
+                            return modelAssignment;
                         }
                         else
                         {
-                            _logger.LogWarning("Failed to lock GPUs: {GpuIds}", string.Join(',', gpuIds));
+                            logger.LogWarning("Failed to lock GPUs: {GpuIds}", string.Join(',', gpuIds));
                         }
                     }
                 }
 
                 // Wait for GPU freed notification or cancellation
-                _gpusFreedEvent.Wait(cancellationToken);
-                _gpusFreedEvent.Reset(); // Reset the event to wait for the next change
+                gpusFreedEvent.Wait(cancellationToken);
+                gpusFreedEvent.Reset(); // Reset the event to wait for the next change
             }
         }
     }
