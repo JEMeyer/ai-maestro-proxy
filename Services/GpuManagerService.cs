@@ -77,9 +77,10 @@ namespace AIMaestroProxy.Services
                 {
                     db.StringSet($"gpu-lock:{gpuId}", false);
                 }
-                subscriber.Publish(NewGpuAvailableChannel, $"GPU(s) {gpuIds} freed");
-                var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "0");
-                subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
+                var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "0");
+                var message = JsonSerializer.Serialize(unlockedGpus);
+                subscriber.Publish(GpuLockChangesChannel, message);
+                gpusFreedEvent.Set();
             }
         }
 

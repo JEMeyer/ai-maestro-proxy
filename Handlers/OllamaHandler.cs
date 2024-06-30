@@ -1,11 +1,12 @@
 using System.Text.Json;
+using AIMaestroProxy.Models;
 using AIMaestroProxy.Services;
 
 namespace AIMaestroProxy.Handlers
 {
     public class OllamaHandler(DataService dataService, ILogger<OllamaHandler> logger, GpuManagerService gpuManagerService, ProxiedRequestService proxiedRequestService)
     {
-        public async Task HandleTagsRequestAsync(HttpContext context)
+        public async Task HandleContainersRequestAsync(HttpContext context, string path)
         {
             var containerInfos = await dataService.GetLlmContainerInfosAsync();
             var modelsJsonStrings = new List<string>();
@@ -13,7 +14,7 @@ namespace AIMaestroProxy.Handlers
 
             foreach (var containerInfo in containerInfos)
             {
-                var response = await client.GetStringAsync($"http://{containerInfo.Ip}:{containerInfo.Port}/api/tags");
+                var response = await client.GetStringAsync($"http://{containerInfo.Ip}:{containerInfo.Port}/api/{path}");
                 using JsonDocument doc = JsonDocument.Parse(response);
 
                 var responseModels = doc.RootElement.GetProperty("models").EnumerateArray();
@@ -36,14 +37,14 @@ namespace AIMaestroProxy.Handlers
             await context.Response.WriteAsync(concatenatedModels);
         }
 
-        public async Task HandleShowRequestAsync(HttpContext context)
+        public async Task HandleModelRequestAsync(HttpContext context)
         {
-            var request = await ComputeHandler.ParseRequestModelFromContext(context);
+            var request = await RequestModelParser.ParseFromContext(context);
 
-            logger.LogDebug("Handling /show request for model: {Model}", request.Name);
+            logger.LogDebug("Handling /show request for model: {Model}", request.ModelName);
             // Try to get an available model modelAssignment
-            ArgumentNullException.ThrowIfNull(request.Name);
-            var modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(request.Name, context.RequestAborted);
+            ArgumentNullException.ThrowIfNull(request.ModelName);
+            var modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(request.ModelName, context.RequestAborted);
             ArgumentNullException.ThrowIfNull(modelAssignment);
 
             var gpuIds = modelAssignment.GpuIds.Split(',');
