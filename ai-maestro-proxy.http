@@ -95,7 +95,7 @@ Content-Type: application/json
 GET {{baseProxyUrl}}:{{proxyPort}}/api/version
 Content-Type: application/json
 
-### Get model info
+### Get model info (by posting)
 POST {{baseProxyUrl}}:{{proxyPort}}/api/show
 Content-Type: application/json
 
