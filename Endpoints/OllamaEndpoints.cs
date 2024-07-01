@@ -24,6 +24,11 @@ namespace AIMaestroProxy.Endpoints
             endpoints.MapPost("/api/show", async (HttpContext context, OllamaHandler handlerService) =>
             {
                 var request = await RequestModelParser.ParseFromContext(context);
+                ArgumentException.ThrowIfNullOrEmpty(request.Name);
+
+                // If they pass in a naked model, assume it's :latest
+                if (!request.Name.Contains(':'))
+                    request.Name += ":latest";
                 await handlerService.HandleOllamaProcessRequestAsync(context, request.Name, request);
             });
 

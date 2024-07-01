@@ -20,18 +20,22 @@ namespace AIMaestroProxy.Handlers
         // Just call any server that has our model, we shouldn't need GPUs for this so not reserving
         public async Task HandleOllamaProcessRequestAsync(HttpContext context, string? requiredModel = null, RequestModel? request = null)
         {
+            logger.LogDebug("Handling non-compute Ollama request with intended model {model}", requiredModel ?? "<any>");
+
             // If requiredModel is not defined, then we can get any instance. Otherwise filter.
-            var containerInfos = (await dataService.GetLlmContainerInfosAsync())
+            var allContainerInfos = await dataService.GetLlmContainerInfosAsync();
+            logger.LogDebug("We have {count} containers in the handler that match.", allContainerInfos.Count());
+            var containerInfos = allContainerInfos
                 .Where(item => string.IsNullOrEmpty(requiredModel) || item.ModelName == requiredModel);
             ModelAssignment? modelAssignment = null;
             if (containerInfos.Any())
             {
                 modelAssignment = new ModelAssignment
                 {
-                    Name = "Random diffusion model name", // Doesn't matter
+                    Name = "<random_diffusion>", // Doesn't matter
                     Ip = containerInfos.First().Ip,
                     Port = containerInfos.First().Port,
-                    GpuIds = "-1" // Doesn't matter
+                    GpuIds = "" // Doesn't matter
                 };
             }
             ArgumentNullException.ThrowIfNull(modelAssignment);

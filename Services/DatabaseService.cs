@@ -42,7 +42,7 @@ namespace AIMaestroProxy.Services
         {
             var sql = @"
                 SELECT
-                    a.model_name as modelName
+                    a.model_name as modelName,
                     a.port,
                     c.ip_addr AS ip
                 FROM
@@ -63,7 +63,7 @@ namespace AIMaestroProxy.Services
 
             var containerInfos = await dbConnection.QueryAsync<ContainerInfo>(sql);
 
-            logger.LogDebug("Found {modelAssignmentsCount} containers running llms", containerInfos.Count());
+            logger.LogDebug("Found {count} containers running llms", containerInfos.Count());
 
             return containerInfos;
         }
@@ -72,7 +72,7 @@ namespace AIMaestroProxy.Services
         {
             var sql = @"
                 SELECT
-                    a.model_name as modelName
+                    a.model_name as modelName,
                     a.port,
                     c.ip_addr AS ip
                 FROM
@@ -93,7 +93,7 @@ namespace AIMaestroProxy.Services
 
             var containerInfos = await dbConnection.QueryAsync<ContainerInfo>(sql);
 
-            logger.LogDebug("Found {modelAssignmentsCount} containers running llms", containerInfos.Count());
+            logger.LogDebug("Found {count} containers running diffusion models.", containerInfos.Count());
 
             return containerInfos;
         }

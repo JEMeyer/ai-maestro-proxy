@@ -91,6 +91,14 @@ Content-Type: application/json
 GET {{baseProxyUrl}}:{{proxyPort}}/api/tags
 Content-Type: application/json
 
+### Get model info
+POST {{baseProxyUrl}}:{{proxyPort}}/api/show
+Content-Type: application/json
+
+{
+  "name": "codestral"
+}
+
 ###
 ### XTTS ENDPOINTS
 ###
