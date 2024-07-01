@@ -22,7 +22,6 @@ namespace AIMaestroProxy.Services
             // We only get request if it was modified, otherwise we just read from context
             request ??= await RequestModelParser.ParseFromContext(context);
 
-
             logger.LogDebug("Starting to route a request to IP: {Ip}, Port: {Port}", modelAssignment.Ip, modelAssignment.Port);
             var path = context.Request.Path.ToString();
             var queryString = context.Request.QueryString.ToString();
@@ -32,7 +31,6 @@ namespace AIMaestroProxy.Services
 
             var httpRequest = new HttpRequestMessage(new HttpMethod(context.Request.Method), requestUri);
 
-            // Handle different content types
             if (context.Request.HasFormContentType)
             {
                 var form = await context.Request.ReadFormAsync();
@@ -41,7 +39,6 @@ namespace AIMaestroProxy.Services
 
                 foreach (var field in form)
                 {
-                    // Check if the field value is not null or empty
                     if (!StringValues.IsNullOrEmpty(field.Value))
                     {
                         foreach (var value in field.Value)
@@ -71,27 +68,24 @@ namespace AIMaestroProxy.Services
 
             logger.LogDebug("Sending with RequestModel: {model}", JsonSerializer.Serialize(request, serializerOptions));
 
-            // Send the request and get the response
             using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted).ConfigureAwait(false);
             logger.LogDebug("Received a response with status code: {StatusCode}", response.StatusCode);
 
             response.EnsureSuccessStatusCode();
 
             context.Response.ContentType = response.Content.Headers.ContentType?.ToString();
-            context.Response.ContentLength = response.Content.Headers.ContentLength;
 
-            if (request.Stream.GetValueOrDefault())
+            if (request?.Stream == true)
             {
-                context.Items["SkipContentLength"] = true;
                 await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
                 await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
             }
             else
             {
                 var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
+                context.Response.ContentLength = responseContent.Length;
                 await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
             }
         }
-
     }
 }

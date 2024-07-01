@@ -25,8 +25,8 @@ Content-Type: application/json
 ### OLLAMA ENDPOINTS
 ###
 
-### Generate request, JSON
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+### Chat request, JSON
+POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
 Content-Type: application/json
 
 {

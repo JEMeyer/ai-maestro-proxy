@@ -50,9 +50,6 @@ builder.Services.AddHttpClient<ProxiedRequestService>();
 
 var app = builder.Build();
 
-// Middleware to strip off the chunked transfer-encoding (unless marked otherwise)
-app.UseMiddleware<ConditionalContentLengthMiddleware>();
-
 // Middleware to handle errors globally
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
