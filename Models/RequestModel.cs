@@ -14,21 +14,16 @@ namespace AIMaestroProxy.Models
 
     public class RequestModel
     {
-        private string? Name { get; set; }
+        public string? Name { get; set; }
 
-        private string? Model { get; set; }
-
-        [JsonIgnore]
-        public string ModelName
-        {
-            get => Name ?? Model ?? "";
-        }
+        public string? Model { get; set; }
 
         [JsonPropertyName("keep_alive")]
         public int? KeepAlive { get; set; }
 
         public bool? Stream { get; set; }
 
+        [JsonExtensionData]
         public Dictionary<string, JsonElement> AdditionalData { get; set; } = [];
     }
 }

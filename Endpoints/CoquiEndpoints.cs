@@ -1,5 +1,3 @@
-using AIMaestroProxy.Handlers;
-
 namespace AIMaestroProxy.Endpoints
 {
     public static class CoquiEndpoints

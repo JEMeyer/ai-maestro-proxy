@@ -4,34 +4,15 @@ using StackExchange.Redis;
 
 namespace AIMaestroProxy.Services
 {
-    public class GpuManagerService
+    public class GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
     {
-        private readonly DataService dataService;
-        private readonly IConnectionMultiplexer redis;
-        private readonly ILogger<GpuManagerService> logger;
-        private readonly ISubscriber subscriber;
+        private readonly DataService dataService = dataService;
+        private readonly IConnectionMultiplexer redis = redis;
+        private readonly ILogger<GpuManagerService> logger = logger;
+        private readonly ISubscriber subscriber = redis.GetSubscriber();
         private readonly object lockObject = new();
         private readonly ManualResetEventSlim gpusFreedEvent = new(false);
-        private static readonly RedisChannel NewGpuAvailableChannel = RedisChannel.Literal("gpu-now-free-channel");
         private static readonly RedisChannel GpuLockChangesChannel = RedisChannel.Literal("gpu-lock-changes");
-
-        public GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
-        {
-            this.dataService = dataService;
-            this.redis = redis;
-            this.logger = logger;
-            subscriber = redis.GetSubscriber();
-            SubscribeToNewGpuAvailableNotifications();
-        }
-
-        private void SubscribeToNewGpuAvailableNotifications()
-        {
-            subscriber.Subscribe(NewGpuAvailableChannel, (channel, message) =>
-            {
-                logger.LogDebug("Setting the reset event to free queued threads");
-                gpusFreedEvent.Set();
-            });
-        }
 
         public bool TryLockGPUs(string[] gpuIds)
         {

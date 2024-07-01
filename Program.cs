@@ -29,17 +29,23 @@ builder.Services.AddLogging(loggingBuilder =>
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 ArgumentException.ThrowIfNullOrWhiteSpace(redisConnectionString);
 
-// Add Singleton services
+// Add Singletone services for the database/redis clients
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
+
+// Add Singleton services for Services
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<DataService>();
-builder.Services.AddSingleton<OllamaHandler>();
-builder.Services.AddSingleton<ComputeHandler>();
 builder.Services.AddSingleton<GpuManagerService>();
 
-// HttpClient is transient by default
+// Add Singleton services for Handlers
+builder.Services.AddSingleton<DiffusionHandler>();
+builder.Services.AddSingleton<OllamaHandler>();
+builder.Services.AddSingleton<SpeechHandler>();
+builder.Services.AddSingleton<ComputeHandler>();
+
+// Add transient HttpClient service for proxied requests
 builder.Services.AddHttpClient<ProxiedRequestService>();
 
 var app = builder.Build();
@@ -51,15 +57,13 @@ app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseMiddleware<TraceIdLoggingMiddleware>();
 app.UseMiddleware<StopwatchMiddleware>();
 
-// Middleware to remove chunked transfer encoding header
-app.UseMiddleware<RemoveChunkedTransferEncodingMiddleware>();
-
 // Middleware to handle not found responses
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
 // Ollama, StableDiffusion, Coqui, and Whisper endpoints
 app.MapOllamaEndpoints();
 app.MapDiffusionEndpoints();
-
+app.MapCoquiEndpoints();
+app.MapIFWhisperEndpoints();
 
 app.Run();

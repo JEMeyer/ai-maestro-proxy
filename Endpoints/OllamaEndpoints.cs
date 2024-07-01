@@ -11,7 +11,7 @@ namespace AIMaestroProxy.Endpoints
 
             endpoints.MapPost("/v1/chat/completions", async (HttpContext context) =>
             {
-                await context.Response.WriteAsync("ProcessHandler endpoint hit");
+                await context.Response.WriteAsync("Ollama OpenAI endpoint hit");
             });
 
             // These should cover all the /api endpoints for Ollama
@@ -23,27 +23,32 @@ namespace AIMaestroProxy.Endpoints
 
             endpoints.MapPost("/api/show", async (HttpContext context, OllamaHandler handlerService) =>
             {
-                await handlerService.HandleModelRequestAsync(context);
+                await handlerService.HandleOllamaProcessRequestAsync(context);
             });
 
-            endpoints.MapPost("/api/chat", async (HttpContext context, ComputeHandler handlerService) =>
+            endpoints.MapPost("/api/chat", async (HttpContext context, OllamaHandler handlerService) =>
             {
                 await handlerService.HandleOllamaComputeRequestAsync(context);
             });
 
-            endpoints.MapPost("/api/generate", async (HttpContext context, ComputeHandler handlerService) =>
+            endpoints.MapPost("/api/generate", async (HttpContext context, OllamaHandler handlerService) =>
             {
                 await handlerService.HandleOllamaComputeRequestAsync(context);
             });
 
-            endpoints.MapPost("/api/embeddings", async (HttpContext context, ComputeHandler handlerService) =>
+            endpoints.MapPost("/api/embeddings", async (HttpContext context, OllamaHandler handlerService) =>
             {
                 await handlerService.HandleOllamaComputeRequestAsync(context);
             });
 
             endpoints.MapGet("/api/tags", async (HttpContext context, OllamaHandler ollamaHandler) =>
             {
-                await ollamaHandler.HandleContainersRequestAsync(context, "tags");
+                await ollamaHandler.HandleOllamaContainersRequestAsync(context, "tags");
+            });
+
+            endpoints.MapGet("/api/ps", async (HttpContext context, OllamaHandler ollamaHandler) =>
+            {
+                await ollamaHandler.HandleOllamaContainersRequestAsync(context, "ps");
             });
 
             // Stub endpoints
@@ -77,10 +82,6 @@ namespace AIMaestroProxy.Endpoints
                 await context.Response.WriteAsync("CreateBlobHandler endpoint hit");
             });
 
-            endpoints.MapGet("/api/ps", async (HttpContext context) =>
-            {
-                await context.Response.WriteAsync("ProcessHandler endpoint hit");
-            });
         }
     }
 }

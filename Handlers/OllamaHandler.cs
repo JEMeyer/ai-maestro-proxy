@@ -4,9 +4,34 @@ using AIMaestroProxy.Services;
 
 namespace AIMaestroProxy.Handlers
 {
-    public class OllamaHandler(DataService dataService, ILogger<OllamaHandler> logger, GpuManagerService gpuManagerService, ProxiedRequestService proxiedRequestService)
+    public class OllamaHandler(DataService dataService, ComputeHandler computeHandler, ProxiedRequestService proxiedRequestService, ILogger<OllamaHandler> logger)
     {
-        public async Task HandleContainersRequestAsync(HttpContext context, string path)
+
+        public async Task HandleOllamaComputeRequestAsync(HttpContext context)
+        {
+            var request = await RequestModelParser.ParseFromContext(context);
+            ArgumentNullException.ThrowIfNull(request.Model);
+            request.KeepAlive = -1;
+            request.Stream ??= true;
+
+            await computeHandler.HandleComputeRequestAsync(context, request.Model, request);
+        }
+
+        // Just call any server that has our model, we shouldn't need GPUs for this so not reserving
+        public async Task HandleOllamaProcessRequestAsync(HttpContext context)
+        {
+            var request = await RequestModelParser.ParseFromContext(context);
+            ArgumentNullException.ThrowIfNull(request.Name);
+
+            // Try to get an available model assignment
+            var modelAssignment = (await dataService.GetModelAssignmentsAsync(request.Name)).First();
+            ArgumentNullException.ThrowIfNull(modelAssignment);
+
+            await proxiedRequestService.RouteRequestAsync(context, modelAssignment, request);
+        }
+
+        // Handles endpoints that would require calling every container (ps or tags) to give an accurate reading
+        public async Task HandleOllamaContainersRequestAsync(HttpContext context, string path)
         {
             var containerInfos = await dataService.GetLlmContainerInfosAsync();
             var modelsJsonStrings = new List<string>();
@@ -35,28 +60,6 @@ namespace AIMaestroProxy.Handlers
 
             // Write the JSON data to the response stream using the WriteAsync() method
             await context.Response.WriteAsync(concatenatedModels);
-        }
-
-        public async Task HandleModelRequestAsync(HttpContext context)
-        {
-            var request = await RequestModelParser.ParseFromContext(context);
-
-            logger.LogDebug("Handling /show request for model: {Model}", request.ModelName);
-            // Try to get an available model modelAssignment
-            ArgumentNullException.ThrowIfNull(request.ModelName);
-            var modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(request.ModelName, context.RequestAborted);
-            ArgumentNullException.ThrowIfNull(modelAssignment);
-
-            var gpuIds = modelAssignment.GpuIds.Split(',');
-
-            try
-            {
-                await proxiedRequestService.RouteRequestAsync(context, request, modelAssignment);
-            }
-            finally
-            {
-                gpuManagerService.UnlockGPUs(gpuIds);
-            }
         }
     }
 }

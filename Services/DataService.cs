@@ -38,6 +38,13 @@ namespace AIMaestroProxy.Services
             return containerInfos;
         }
 
+        public async Task<IEnumerable<ContainerInfo>> GetDiffusionContainerInfosAsync()
+        {
+            var containerInfos = await databaseService.GetDiffusionContainerInfosAsync();
+            return containerInfos;
+        }
+
+
         public async Task CacheModelAssignmentsAsync(string modelName, IEnumerable<ModelAssignment> modelAssignments)
         {
             await cacheService.CacheModelAssignmentsAsync(modelName, modelAssignments);

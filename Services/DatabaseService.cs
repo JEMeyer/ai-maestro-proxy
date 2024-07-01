@@ -66,5 +66,34 @@ namespace AIMaestroProxy.Services
 
             return containerInfos;
         }
+
+        public async Task<IEnumerable<ContainerInfo>> GetDiffusionContainerInfosAsync()
+        {
+            var sql = @"
+                SELECT
+                    a.port,
+                    c.ip_addr AS ip
+                FROM
+                    assignments a
+                    JOIN assignment_gpus ag ON a.id = ag.assignment_id
+                    JOIN gpus g ON g.id = ag.gpu_id
+                    JOIN computers c ON g.computer_id = c.id
+                WHERE
+                    a.model_name IN (
+                        SELECT name
+                        FROM diffusors
+                    )
+                GROUP BY
+                    a.id,
+                    a.port,
+                    c.ip_addr;";
+
+
+            var containerInfos = await dbConnection.QueryAsync<ContainerInfo>(sql);
+
+            logger.LogDebug("Found {modelAssignmentsCount} containers running llms", containerInfos.Count());
+
+            return containerInfos;
+        }
     }
 }
