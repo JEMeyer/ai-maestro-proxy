@@ -8,7 +8,10 @@ namespace AIMaestroProxy.Endpoints
         public static void MapOllamaEndpoints(this IEndpointRouteBuilder endpoints)
         {
             // Naked URL and OpenAI url first, then all /api
-            endpoints.MapGet("/", (HttpContext context) => "Ollama is running.");
+            endpoints.MapGet("/", async (HttpContext context, OllamaHandler handlerService) =>
+            {
+                await handlerService.HandleOllamaProcessRequestAsync(context);
+            });
 
             endpoints.MapPost("/v1/chat/completions", async (HttpContext context) =>
             {
