@@ -85,6 +85,7 @@ namespace AIMaestroProxy.Services
 
             if (request.Stream.GetValueOrDefault())
             {
+                context.Items["SkipContentLength"] = true;
                 await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
                 await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
             }
