@@ -18,13 +18,10 @@ namespace AIMaestroProxy.Services
         public async ValueTask RouteRequestAsync(HttpContext context, ModelAssignment modelAssignment, RequestModel? request = null)
         {
             logger.LogDebug("About to route a request with {assignmentName}", modelAssignment.Name);
+
             // We only get request if it was modified, otherwise we just read from context
             request ??= await RequestModelParser.ParseFromContext(context);
 
-            if (request == null)
-            {
-                throw new ArgumentNullException(nameof(request), "Request cannot be null");
-            }
 
             logger.LogDebug("Starting to route a request to IP: {Ip}, Port: {Port}", modelAssignment.Ip, modelAssignment.Port);
             var path = context.Request.Path.ToString();
@@ -33,7 +30,7 @@ namespace AIMaestroProxy.Services
 
             logger.LogDebug("The constructed request URI is: {Uri}", requestUri);
 
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, requestUri);
+            var httpRequest = new HttpRequestMessage(new HttpMethod(context.Request.Method), requestUri);
 
             // Handle different content types
             if (context.Request.HasFormContentType)
