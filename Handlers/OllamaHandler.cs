@@ -18,13 +18,22 @@ namespace AIMaestroProxy.Handlers
         }
 
         // Just call any server that has our model, we shouldn't need GPUs for this so not reserving
-        public async Task HandleOllamaProcessRequestAsync(HttpContext context)
+        public async Task HandleOllamaProcessRequestAsync(HttpContext context, string? requiredModel = null, RequestModel? request = null)
         {
-            var request = await RequestModelParser.ParseFromContext(context);
-            ArgumentNullException.ThrowIfNull(request.Name);
-
-            // Try to get an available model assignment
-            var modelAssignment = (await dataService.GetModelAssignmentsAsync(request.Name)).First();
+            // If requiredModel is not defined, then we can get any instance. Otherwise filter.
+            var containerInfos = (await dataService.GetLlmContainerInfosAsync())
+                .Where(item => string.IsNullOrEmpty(requiredModel) || item.ModelName == requiredModel);
+            ModelAssignment? modelAssignment = null;
+            if (containerInfos.Any())
+            {
+                modelAssignment = new ModelAssignment
+                {
+                    Name = "Random diffusion model name", // Doesn't matter
+                    Ip = containerInfos.First().Ip,
+                    Port = containerInfos.First().Port,
+                    GpuIds = "-1" // Doesn't matter
+                };
+            }
             ArgumentNullException.ThrowIfNull(modelAssignment);
 
             await proxiedRequestService.RouteRequestAsync(context, modelAssignment, request);

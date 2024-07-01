@@ -1,4 +1,5 @@
 using AIMaestroProxy.Handlers;
+using AIMaestroProxy.Models;
 
 namespace AIMaestroProxy.Endpoints
 {
@@ -15,15 +16,15 @@ namespace AIMaestroProxy.Endpoints
             });
 
             // These should cover all the /api endpoints for Ollama
-            endpoints.MapGet("/api/version", (HttpContext context, IConfiguration configuration) =>
+            endpoints.MapGet("/api/version", async (HttpContext context, OllamaHandler handlerService) =>
             {
-                var version = configuration["Maestro:OllamaVersion"];
-                return Results.Ok(new { version });
+                await handlerService.HandleOllamaProcessRequestAsync(context);
             });
 
             endpoints.MapPost("/api/show", async (HttpContext context, OllamaHandler handlerService) =>
             {
-                await handlerService.HandleOllamaProcessRequestAsync(context);
+                var request = await RequestModelParser.ParseFromContext(context);
+                await handlerService.HandleOllamaProcessRequestAsync(context, request.Name, request);
             });
 
             endpoints.MapPost("/api/chat", async (HttpContext context, OllamaHandler handlerService) =>
@@ -54,6 +55,7 @@ namespace AIMaestroProxy.Endpoints
             // Stub endpoints
             endpoints.MapPost("/api/pull", async (HttpContext context) =>
             {
+                // We can actually call something on the backend right?
                 await context.Response.WriteAsync("PullModelHandler endpoint hit");
             });
 

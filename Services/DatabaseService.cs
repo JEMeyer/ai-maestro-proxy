@@ -42,6 +42,7 @@ namespace AIMaestroProxy.Services
         {
             var sql = @"
                 SELECT
+                    a.model_name as modelName
                     a.port,
                     c.ip_addr AS ip
                 FROM
@@ -71,6 +72,7 @@ namespace AIMaestroProxy.Services
         {
             var sql = @"
                 SELECT
+                    a.model_name as modelName
                     a.port,
                     c.ip_addr AS ip
                 FROM
