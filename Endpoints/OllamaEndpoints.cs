@@ -8,9 +8,28 @@ namespace AIMaestroProxy.Endpoints
         public static void MapOllamaEndpoints(this IEndpointRouteBuilder endpoints)
         {
             // Naked URL and OpenAI url first, then all /api
-            endpoints.MapGet("/", async (HttpContext context, OllamaHandler handlerService) =>
+            endpoints.MapGet("/", async (HttpContext context) =>
             {
-                await handlerService.HandleOllamaProcessRequestAsync(context);
+                context.Response.Headers.Remove("Transfer-Encoding");
+
+                var originalBody = context.Response.Body;
+                using var memoryStream = new MemoryStream();
+                context.Response.Body = memoryStream;
+
+                // Write your response content
+                await context.Response.WriteAsync("Ollama is running");
+
+                // Calculate content length
+                var contentLength = memoryStream.Length;
+
+                // Set Content-Length header
+                context.Response.ContentLength = contentLength;
+                context.Response.Headers["Content-Type"] = "text/plain; charset=utf-8";
+
+                // Copy the buffered content to the original stream
+                memoryStream.Seek(0, SeekOrigin.Begin);
+                await memoryStream.CopyToAsync(originalBody);
+                context.Response.Body = originalBody;
             });
 
             endpoints.MapPost("/v1/chat/completions", async (HttpContext context) =>
