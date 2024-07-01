@@ -24,21 +24,28 @@ namespace AIMaestroProxy.Handlers
 
             // If requiredModel is not defined, then we can get any instance. Otherwise filter.
             var allContainerInfos = await dataService.GetLlmContainerInfosAsync();
-            logger.LogDebug("We have {count} containers in the handler that match.", allContainerInfos.Count());
             var containerInfos = allContainerInfos
-                .Where(item => string.IsNullOrEmpty(requiredModel) || item.ModelName == requiredModel);
+                .Where(item => string.IsNullOrEmpty(requiredModel) || item.ModelName.Contains(requiredModel) || requiredModel.Contains(item.ModelName));
             ModelAssignment? modelAssignment = null;
+            logger.LogDebug("We have {count} containers in the handler for model {model}.", containerInfos.Count(), requiredModel ?? "<any>");
             if (containerInfos.Any())
             {
                 modelAssignment = new ModelAssignment
                 {
-                    Name = "<random_diffusion>", // Doesn't matter
+                    Name = containerInfos.First().ModelName, // Not actually the assignment name, but only we will use this
                     Ip = containerInfos.First().Ip,
                     Port = containerInfos.First().Port,
                     GpuIds = "" // Doesn't matter
                 };
             }
             ArgumentNullException.ThrowIfNull(modelAssignment);
+
+            // Modify the request in case the match needs to be un-fuzzied
+            if (requiredModel != null && request != null)
+            {
+                // The 'longer' one is more correct
+                request.Name = modelAssignment.Name.Contains(requiredModel) ? modelAssignment.Name : requiredModel;
+            }
 
             await proxiedRequestService.RouteRequestAsync(context, modelAssignment, request);
         }

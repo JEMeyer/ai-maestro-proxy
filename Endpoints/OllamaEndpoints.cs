@@ -25,8 +25,17 @@ namespace AIMaestroProxy.Endpoints
             {
                 var request = await RequestModelParser.ParseFromContext(context);
                 ArgumentException.ThrowIfNullOrEmpty(request.Name);
-
-                await handlerService.HandleOllamaProcessRequestAsync(context, request.Name, request);
+                try
+                {
+                    await handlerService.HandleOllamaProcessRequestAsync(context, request.Name, request);
+                }
+                catch
+                {
+                    context.Response.StatusCode = 404;
+                    context.Response.ContentType = "application/json; charset=utf-8";
+                    string responseJson = $"{{ \"error\": \"model '{request.Name ?? "<any>"}' not found\" }}";
+                    await context.Response.WriteAsync(responseJson);
+                }
             });
 
             endpoints.MapPost("/api/chat", async (HttpContext context, OllamaHandler handlerService) =>
