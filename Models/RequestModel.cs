@@ -12,9 +12,7 @@ namespace AIMaestroProxy.Models
         /// <returns></returns>
         public static string GetModelLookupKey(string? body)
         {
-            body ??= string.Empty;
-
-            var json = JsonDocument.Parse(body);
+            var json = JsonDocument.Parse(body ?? "{}");
             string? lookupKey = null;
             if (json.RootElement.TryGetProperty("name", out var name))
             {

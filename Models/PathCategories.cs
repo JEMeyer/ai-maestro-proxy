@@ -27,11 +27,11 @@ namespace AIMaestroProxy.Models
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
-        public PathFamily GetPathFamily(string path)
+        public PathFamily GetNonComputePathFamily(string path)
         {
-            if (path == "/" || path.Contains("/api/") || path.Contains("/v1/chat/completions")) return PathFamily.Ollama;
-            if (path.Contains("/languages") || path.Contains("/studio_speakers") || path.Contains("/tts") || path.Contains("/stt")) return PathFamily.Coqui;
-            if (path.Contains("/upload") || path.Contains("/img2img") || path.Contains("/txt2img")) return PathFamily.Diffusion;
+            if (path.StartsWith("/api/v1")) return PathFamily.Ollama;
+            if (path.StartsWith("/languages") || path.StartsWith("/studio_speakers")) return PathFamily.Coqui;
+            if (path.StartsWith("/upload")) return PathFamily.Diffusion;
 
             return PathFamily.Unknown;
         }
