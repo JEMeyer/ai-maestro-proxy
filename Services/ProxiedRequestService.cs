@@ -28,32 +28,7 @@ namespace AIMaestroProxy.Services
             try
             {
                 using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
-                context.Response.StatusCode = (int)response.StatusCode;
-
-                foreach (var header in response.Headers)
-                {
-                    context.Response.Headers[header.Key] = header.Value.ToArray();
-                }
-
-                foreach (var header in response.Content.Headers)
-                {
-                    context.Response.Headers[header.Key] = header.Value.ToArray();
-                }
-
-                context.Response.Headers.Remove("Transfer-Encoding");
-
-                if (response.Content.Headers.ContentLength.HasValue)
-                {
-                    context.Response.ContentLength = response.Content.Headers.ContentLength.Value;
-                    var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
-                    await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
-                }
-                else if (response.Headers.TransferEncodingChunked == true)
-                {
-                    context.Response.Headers.Remove("Content-Length");
-                    await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
-                    await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
-                }
+                await HandleResponseAsync(context, response);
             }
             catch (TaskCanceledException ex)
             {
@@ -89,15 +64,55 @@ namespace AIMaestroProxy.Services
                     proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
                 }
 
-                var response = await httpClient.SendAsync(proxyRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
-                var responseBody = await response.Content.ReadAsStringAsync();
+                using var response = await httpClient.SendAsync(proxyRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
+
+                // Read the full response content
+                var responseBody = await response.Content.ReadAsStringAsync(context.RequestAborted);
                 var models = JsonDocument.Parse(responseBody).RootElement.GetProperty("models").EnumerateArray();
 
                 modelsList.AddRange(models);
             }
 
+            // Create the result object
             var result = new { models = modelsList };
+
+            // Set headers
+            context.Response.Headers.Remove("Transfer-Encoding");
+            context.Response.ContentLength = null;  // Remove any content length set previously
+
+            // Write the response as JSON
             await context.Response.WriteAsJsonAsync(result);
+        }
+
+
+        private static async Task HandleResponseAsync(HttpContext context, HttpResponseMessage response)
+        {
+            context.Response.StatusCode = (int)response.StatusCode;
+
+            foreach (var header in response.Headers)
+            {
+                context.Response.Headers[header.Key] = header.Value.ToArray();
+            }
+
+            foreach (var header in response.Content.Headers)
+            {
+                context.Response.Headers[header.Key] = header.Value.ToArray();
+            }
+
+            context.Response.Headers.Remove("Transfer-Encoding");
+
+            if (response.Content.Headers.ContentLength.HasValue)
+            {
+                context.Response.ContentLength = response.Content.Headers.ContentLength.Value;
+                var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
+                await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
+            }
+            else if (response.Headers.TransferEncodingChunked == true)
+            {
+                context.Response.Headers.Remove("Content-Length");
+                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
+                await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
+            }
         }
     }
 }

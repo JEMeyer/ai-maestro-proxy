@@ -59,7 +59,7 @@ POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
 Content-Type: application/json
 
 {
-  "model": "codestral",
+  "model": "codestral:latest",
   "prompt": "What color is the sky at different times of the day? Respond using JSON",
   "format": "json",
   "stream": false
@@ -79,23 +79,23 @@ Content-Type: application/json
 
 ### Non-compute Ollama calls
 
-### Healthcheck
+### Healthcheck NOT CHUNKED
 GET {{baseProxyUrl}}:{{proxyPort}}
 Content-Type: application/json
 
-### Get running containers
+### Get running containers NOT CHUNKED
 GET {{baseProxyUrl}}:{{proxyPort}}/api/ps
 Content-Type: application/json
 
-### Get loaded models
+### Get loaded models CHUNKED
 GET {{baseProxyUrl}}:{{proxyPort}}/api/tags
 Content-Type: application/json
 
-### Get Ollama version
+### Get Ollama version NOT CHUNKED
 GET {{baseProxyUrl}}:{{proxyPort}}/api/version
 Content-Type: application/json
 
-### Get model info (by posting)
+### Get model info (by posting) CHUNKED
 POST {{baseProxyUrl}}:{{proxyPort}}/api/show
 Content-Type: application/json
 
