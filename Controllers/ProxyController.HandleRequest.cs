@@ -9,9 +9,8 @@ namespace AIMaestroProxy.Controllers
         [NonAction]
         private async Task<IActionResult> HandleRequest(HttpMethod method, string path)
         {
-            path = "/" + path;
+            logger.LogDebug("Starting HandleRequest with path \"{path}\"", path);
 
-            logger.LogDebug("Starting HandleRequest");
             var context = HttpContext;
             var body = method != HttpMethod.Get && method != HttpMethod.Head ? await new StreamReader(context.Request.Body).ReadToEndAsync() : null;
             try
@@ -46,7 +45,8 @@ namespace AIMaestroProxy.Controllers
                         if (pathCategories.Value.LoopingServerPaths.Contains(path))
                         {
                             logger.LogDebug("Looping request");
-                            await proxiedRequestService.RouteLoopingRequestAsync(context, path, allContainerInfos);
+                            var forceChunked = path.StartsWith("api/tags");
+                            await proxiedRequestService.RouteLoopingRequestAsync(context, path, allContainerInfos, forceChunked);
                             return new EmptyResult();
                         }
 
