@@ -14,11 +14,9 @@ namespace AIMaestroProxy.Controllers
     {
 
         [HttpGet("")]
-        public IActionResult HealthCheck()
+        public async Task<IActionResult> HealthCheck()
         {
-            var content = "Ollama is running";
-            Response.Headers["Content-Length"] = content.Length.ToString();
-            return Ok(content);
+            return await HandleRequest(HttpMethod.Get, string.Empty);
         }
 
         [HttpGet("{*path}")]

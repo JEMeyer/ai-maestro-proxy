@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using AIMaestroProxy.Models;
@@ -65,25 +66,24 @@ namespace AIMaestroProxy.Services
                 }
 
                 using var response = await httpClient.SendAsync(proxyRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
-
-                // Read the full response content
                 var responseBody = await response.Content.ReadAsStringAsync(context.RequestAborted);
                 var models = JsonDocument.Parse(responseBody).RootElement.GetProperty("models").EnumerateArray();
 
                 modelsList.AddRange(models);
             }
 
-            // Create the result object
             var result = new { models = modelsList };
+            var resultJson = JsonSerializer.Serialize(result);
+            var resultContent = new StringContent(resultJson, Encoding.UTF8, "application/json");
 
-            // Set headers
-            context.Response.Headers.Remove("Transfer-Encoding");
-            context.Response.ContentLength = null;  // Remove any content length set previously
+            var finalResponse = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = resultContent
+            };
 
-            // Write the response as JSON
-            await context.Response.WriteAsJsonAsync(result);
+            // Use HandleResponseAsync to handle the final response
+            await HandleResponseAsync(context, finalResponse);
         }
-
 
         private static async Task HandleResponseAsync(HttpContext context, HttpResponseMessage response)
         {
