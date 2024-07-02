@@ -27,10 +27,11 @@ builder.Services.AddLogging(loggingBuilder =>
     loggingBuilder.AddConsole(options => options.FormatterName = "custom");
     loggingBuilder.AddConsoleFormatter<CustomConsoleFormatter, ConsoleFormatterOptions>();
 });
+
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 ArgumentException.ThrowIfNullOrWhiteSpace(redisConnectionString);
 
-// Add Singletone services for the database/redis clients
+// Add Singleton services for the database/redis clients
 builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
 builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
 
@@ -46,7 +47,6 @@ builder.Services.Configure<PathCategories>(builder.Configuration.GetSection("Pat
 
 // Add transient HttpClient service for proxied requests
 builder.Services.AddHttpClient<ProxiedRequestService>();
-builder.Services.AddHttpClient<ProxiedRequestService2>();
 
 var app = builder.Build();
 
@@ -60,12 +60,7 @@ app.UseMiddleware<StopwatchMiddleware>();
 // Middleware to handle not found responses
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
-// Ollama, StableDiffusion, Coqui, and Whisper endpoints
-// app.MapOllamaEndpoints();
-// app.MapDiffusionEndpoints();
-// app.MapCoquiEndpoints();
-// app.MapIFWhisperEndpoints();
-
+// Define the default route
 app.MapControllerRoute(
     name: "default",
     pattern: "{*path}",

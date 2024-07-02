@@ -6,25 +6,62 @@ using AIMaestroProxy.Models;
 namespace AIMaestroProxy.Controllers
 {
     [ApiController]
-    [Route("{*path}")]
-    public class ProxyController(GpuManagerService gpuManagerService, IOptions<PathCategories> pathCategories, ProxiedRequestService2 proxiedRequestService, DataService dataService) : ControllerBase
+    public class ProxyController(GpuManagerService gpuManagerService, IOptions<PathCategories> pathCategories, ProxiedRequestService proxiedRequestService, DataService dataService) : ControllerBase
     {
-        [HttpGet("{*path}")]
+        [HttpGet("")]
+        public IActionResult HealthCheck()
+        {
+            var content = "Ollama is running";
+            Response.Headers["Content-Length"] = content.Length.ToString();
+            return Ok(content);
+        }
+
+        [HttpGet("{**path}")]
         public async Task<IActionResult> Get([FromRoute] string path)
         {
             return await HandleRequest(HttpMethod.Get, path);
         }
 
-        [HttpPost("{*path}")]
+        [HttpPost("{**path}")]
         public async Task<IActionResult> Post([FromRoute] string path)
         {
             return await HandleRequest(HttpMethod.Post, path);
         }
+        [HttpPut("{**path}")]
+        public async Task<IActionResult> Put([FromRoute] string path)
+        {
+            return await HandleRequest(HttpMethod.Put, path);
+        }
 
+        [HttpDelete("{**path}")]
+        public async Task<IActionResult> Delete([FromRoute] string path)
+        {
+            return await HandleRequest(HttpMethod.Delete, path);
+        }
+
+        [HttpHead("{**path}")]
+        public async Task<IActionResult> Head([FromRoute] string path)
+        {
+            return await HandleRequest(HttpMethod.Head, path);
+        }
+
+        [HttpOptions("{**path}")]
+        public async Task<IActionResult> Options([FromRoute] string path)
+        {
+            return await HandleRequest(HttpMethod.Head, path);
+        }
+
+        [HttpPatch("{**path}")]
+        public async Task<IActionResult> Patch([FromRoute] string path)
+        {
+            return await HandleRequest(HttpMethod.Head, path);
+        }
+
+        [NonAction]
         private async Task<IActionResult> HandleRequest(HttpMethod method, string path)
         {
             var context = HttpContext;
-            var body = method == HttpMethod.Post || method == HttpMethod.Put ? await new StreamReader(context.Request.Body).ReadToEndAsync() : null;
+            var body = method != HttpMethod.Get && method != HttpMethod.Head ? await new StreamReader(context.Request.Body).ReadToEndAsync() : null;
 
             ModelAssignment? modelAssignment = null;
             try
@@ -47,7 +84,7 @@ namespace AIMaestroProxy.Controllers
                     // Looping is weird/early exit, so check it first
                     if (pathCategories.Value.LoopingServerPaths.Contains(path))
                     {
-                        await proxiedRequestService.HandleLoopingRequestAsync(context, path, allContainerInfos);
+                        await proxiedRequestService.RouteLoopingRequestAsync(context, path, allContainerInfos);
                         return new EmptyResult();
                     }
 
