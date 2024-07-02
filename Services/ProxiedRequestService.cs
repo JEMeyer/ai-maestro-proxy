@@ -52,7 +52,7 @@ namespace AIMaestroProxy.Services
         public async Task RouteLoopingRequestAsync(HttpContext context, string path, IEnumerable<ContainerInfo> containerInfos)
         {
             logger.LogDebug("Handling looping request for {path}", path);
-            var modelsList = new List<string>();
+            var modelsList = new List<JsonElement>();
 
             foreach (var container in containerInfos)
             {
@@ -67,7 +67,8 @@ namespace AIMaestroProxy.Services
                 var response = await httpClient.SendAsync(proxyRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
                 var responseBody = await response.Content.ReadAsStringAsync();
                 var models = JsonDocument.Parse(responseBody).RootElement.GetProperty("models").EnumerateArray();
-                modelsList.AddRange(models.Select(model => model.GetString() ?? string.Empty));
+
+                modelsList.AddRange(models);
             }
 
             var result = new { models = modelsList };

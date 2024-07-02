@@ -29,7 +29,7 @@ namespace AIMaestroProxy.Models
         /// <returns></returns>
         public PathFamily GetNonComputePathFamily(string path)
         {
-            if (path.StartsWith("/api/v1")) return PathFamily.Ollama;
+            if (path.StartsWith("/api/")) return PathFamily.Ollama;
             if (path.StartsWith("/languages") || path.StartsWith("/studio_speakers")) return PathFamily.Coqui;
             if (path.StartsWith("/upload")) return PathFamily.Diffusion;
 
