@@ -67,7 +67,10 @@ namespace AIMaestroProxy.Services
 
         public async Task<ModelAssignment?> GetAvailableModelAssignmentAsync(string modelName, CancellationToken cancellationToken)
         {
+            ArgumentException.ThrowIfNullOrEmpty(modelName);
             var modelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
+            if (!modelAssignments.Any())
+                return null;
 
             while (true)
             {

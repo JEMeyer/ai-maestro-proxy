@@ -1,4 +1,6 @@
 using AIMaestroProxy.Models;
+using static AIMaestroProxy.Models.PathCategories;
+
 
 namespace AIMaestroProxy.Services
 {
@@ -32,15 +34,9 @@ namespace AIMaestroProxy.Services
             }
         }
 
-        public async Task<IEnumerable<ContainerInfo>> GetLlmContainerInfosAsync()
+        public async Task<IEnumerable<ContainerInfo>> GetContainerInfosAsync(PathFamily pathFamily)
         {
-            var containerInfos = await databaseService.GetLlmContainerInfosAsync();
-            return containerInfos;
-        }
-
-        public async Task<IEnumerable<ContainerInfo>> GetDiffusionContainerInfosAsync()
-        {
-            var containerInfos = await databaseService.GetDiffusionContainerInfosAsync();
+            var containerInfos = await databaseService.GetContainerInfosAsync(pathFamily);
             return containerInfos;
         }
 

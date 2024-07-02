@@ -5,6 +5,33 @@ namespace AIMaestroProxy.Models
 {
     public static class RequestModelParser
     {
+        /// <summary>
+        /// Pulls name or model off the body. Will trim :latest since we dont use that
+        /// </summary>
+        /// <param name="body"></param>
+        /// <returns></returns>
+        public static string GetModelLookupKey(string? body)
+        {
+            body ??= string.Empty;
+
+            var json = JsonDocument.Parse(body);
+            string? lookupKey = null;
+            if (json.RootElement.TryGetProperty("name", out var name))
+            {
+                lookupKey = name.GetString();
+            }
+            if (json.RootElement.TryGetProperty("model", out var model))
+            {
+                lookupKey = model.GetString();
+            }
+            lookupKey ??= string.Empty;
+
+            if (lookupKey.EndsWith(":latest"))
+                lookupKey = lookupKey[..^7];
+
+            return lookupKey;
+        }
+
         public static async Task<RequestModel> ParseFromContext(HttpContext context)
         {
             try
@@ -47,6 +74,7 @@ namespace AIMaestroProxy.Models
             return new RequestModel();
         }
     }
+
 
     public class RequestModel
     {

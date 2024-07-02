@@ -1,7 +1,6 @@
-using AIMaestroProxy.Endpoints;
-using AIMaestroProxy.Handlers;
 using AIMaestroProxy.Logging;
 using AIMaestroProxy.Middleware;
+using AIMaestroProxy.Models;
 using AIMaestroProxy.Services;
 using Microsoft.Extensions.Logging.Console;
 using MySql.Data.MySqlClient;
@@ -11,7 +10,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
 
-// Don't use Kestral
 builder.WebHost.UseKestrel(options => options.AddServerHeader = false);
 
 // Load Config values
@@ -41,15 +39,14 @@ builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddSingleton<DataService>();
 builder.Services.AddSingleton<GpuManagerService>();
+builder.Services.AddControllers();
 
-// Add Singleton services for Handlers
-builder.Services.AddSingleton<DiffusionHandler>();
-builder.Services.AddSingleton<OllamaHandler>();
-builder.Services.AddSingleton<SpeechHandler>();
-builder.Services.AddSingleton<ComputeHandler>();
+// Load up endpoints from config. Dynamic for idk why, someone can use this with any backend.
+builder.Services.Configure<PathCategories>(builder.Configuration.GetSection("PathCategories"));
 
 // Add transient HttpClient service for proxied requests
 builder.Services.AddHttpClient<ProxiedRequestService>();
+builder.Services.AddHttpClient<ProxiedRequestService2>();
 
 var app = builder.Build();
 
@@ -64,9 +61,14 @@ app.UseMiddleware<StopwatchMiddleware>();
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
 // Ollama, StableDiffusion, Coqui, and Whisper endpoints
-app.MapOllamaEndpoints();
-app.MapDiffusionEndpoints();
-app.MapCoquiEndpoints();
-app.MapIFWhisperEndpoints();
+// app.MapOllamaEndpoints();
+// app.MapDiffusionEndpoints();
+// app.MapCoquiEndpoints();
+// app.MapIFWhisperEndpoints();
+
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{*path}",
+    defaults: new { controller = "Proxy", action = "HandleRequest" });
 
 app.Run();
