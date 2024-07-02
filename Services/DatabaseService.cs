@@ -1,6 +1,7 @@
 using Dapper;
 using MySql.Data.MySqlClient;
 using AIMaestroProxy.Models;
+using static AIMaestroProxy.Models.PathCategories;
 
 namespace AIMaestroProxy.Services
 {
@@ -38,9 +39,16 @@ namespace AIMaestroProxy.Services
             return modelAssignments;
         }
 
-        public async Task<IEnumerable<ContainerInfo>> GetLlmContainerInfosAsync()
+        public async Task<IEnumerable<ContainerInfo>> GetContainerInfosAsync(PathFamily pathFamily)
         {
-            var sql = @"
+            string table = pathFamily switch
+            {
+                PathFamily.Diffusion => "diffusors",
+                PathFamily.Coqui => "speech_models",
+                PathFamily.Ollama => "llms",
+                _ => throw new ArgumentException("Invalid path family."),
+            };
+            var sql = $@"
                 SELECT
                     a.model_name as modelName,
                     a.port,
@@ -53,47 +61,16 @@ namespace AIMaestroProxy.Services
                 WHERE
                     a.model_name IN (
                         SELECT name
-                        FROM llms
+                        FROM {table}
                     )
                 GROUP BY
                     a.id,
                     a.port,
                     c.ip_addr;";
 
-
             var containerInfos = await dbConnection.QueryAsync<ContainerInfo>(sql);
 
-            logger.LogDebug("Found {count} containers running llms", containerInfos.Count());
-
-            return containerInfos;
-        }
-
-        public async Task<IEnumerable<ContainerInfo>> GetDiffusionContainerInfosAsync()
-        {
-            var sql = @"
-                SELECT
-                    a.model_name as modelName,
-                    a.port,
-                    c.ip_addr AS ip
-                FROM
-                    assignments a
-                    JOIN assignment_gpus ag ON a.id = ag.assignment_id
-                    JOIN gpus g ON g.id = ag.gpu_id
-                    JOIN computers c ON g.computer_id = c.id
-                WHERE
-                    a.model_name IN (
-                        SELECT name
-                        FROM diffusors
-                    )
-                GROUP BY
-                    a.id,
-                    a.port,
-                    c.ip_addr;";
-
-
-            var containerInfos = await dbConnection.QueryAsync<ContainerInfo>(sql);
-
-            logger.LogDebug("Found {count} containers running diffusion models.", containerInfos.Count());
+            logger.LogDebug("Found {count} containers running {table} models.", containerInfos.Count(), table);
 
             return containerInfos;
         }
