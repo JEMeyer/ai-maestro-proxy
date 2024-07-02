@@ -25,26 +25,51 @@ namespace AIMaestroProxy.Services
                 httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
             }
 
-            using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
-            context.Response.StatusCode = (int)response.StatusCode;
+            try
+            {
+                using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
+                context.Response.StatusCode = (int)response.StatusCode;
 
-            foreach (var header in response.Headers)
-            {
-                context.Response.Headers[header.Key] = header.Value.ToArray();
-            }
+                foreach (var header in response.Headers)
+                {
+                    context.Response.Headers[header.Key] = header.Value.ToArray();
+                }
 
-            if (response.Content.Headers.ContentType?.MediaType == "application/octet-stream" || response.Headers.TransferEncodingChunked == true)
-            {
-                context.Response.Headers.Remove("Content-Length");
-                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
-                await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
-            }
-            else
-            {
-                var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
+                foreach (var header in response.Content.Headers)
+                {
+                    context.Response.Headers[header.Key] = header.Value.ToArray();
+                }
+
                 context.Response.Headers.Remove("Transfer-Encoding");
-                context.Response.ContentLength = responseContent.Length;
-                await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
+
+                if (response.Content.Headers.ContentLength.HasValue)
+                {
+                    context.Response.ContentLength = response.Content.Headers.ContentLength.Value;
+                    var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
+                    await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
+                }
+                else if (response.Headers.TransferEncodingChunked == true)
+                {
+                    context.Response.Headers.Remove("Content-Length");
+                    await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
+                    await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
+                }
+            }
+            catch (TaskCanceledException ex)
+            {
+                if (!context.Response.HasStarted)
+                {
+                    logger.LogError("Request was canceled: {ex}", ex);
+                    context.Response.StatusCode = StatusCodes.Status408RequestTimeout;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!context.Response.HasStarted)
+                {
+                    logger.LogError("Error routing request: {ex}", ex);
+                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                }
             }
         }
 
