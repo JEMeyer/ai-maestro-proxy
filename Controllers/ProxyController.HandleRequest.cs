@@ -9,6 +9,12 @@ namespace AIMaestroProxy.Controllers
         [NonAction]
         private async Task<IActionResult> HandleRequest(HttpMethod method, string path)
         {
+            // Blacklist openai/ endpoints
+            if (path.StartsWith("openai/", StringComparison.OrdinalIgnoreCase))
+            {
+                return NotFound();
+            }
+
             logger.LogDebug("Starting HandleRequest with path \"{path}\"", path);
 
             var context = HttpContext;
@@ -21,6 +27,10 @@ namespace AIMaestroProxy.Controllers
                     if (pathCategories.Value.GpuBoundPaths.Contains(path))
                     {
                         logger.LogDebug("GPU Bound");
+                        if (path.StartsWith("/api/") || path.StartsWith("v1/chat/completions"))
+                        {
+                            body = RequestModelParser.SetKeepAlive(body);
+                        }
                         var modelLookupKey = RequestModelParser.GetModelLookupKey(body);
                         modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(modelLookupKey, context.RequestAborted);
 
