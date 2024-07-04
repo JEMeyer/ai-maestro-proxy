@@ -61,14 +61,14 @@ namespace AIMaestroProxy.Services
             }
         }
 
-        public bool GetGpuLock(string gpuId)
+        public GpuLock? GetGpuLock(string gpuId)
         {
-            return bool.Parse(cacheService.GetCachedData<string>(CacheCategory.GpuLock, gpuId) ?? "False");
+            return cacheService.GetCachedData<GpuLock>(CacheCategory.GpuLock, gpuId);
         }
 
-        public void SetGpuLock(string gpuId, bool lockState)
+        public void SetGpuLock(string gpuId, GpuLock gpuLock)
         {
-            cacheService.CacheData(CacheCategory.GpuLock, gpuId, lockState.ToString());
+            cacheService.CacheData(CacheCategory.GpuLock, gpuId, JsonSerializer.Serialize(gpuLock));
         }
     }
 }

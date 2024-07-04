@@ -44,7 +44,7 @@ namespace AIMaestroProxy.Controllers
                         // Looping is weird/early exit, so check it first
                         if (pathCategories.Value.LoopingServerPaths.Contains(path))
                         {
-                            logger.LogDebug("Looping request");
+                            logger.LogDebug("Looping request with {count} containers.", allContainerInfos.Count());
                             await proxiedRequestService.RouteLoopingRequestAsync(context, path, allContainerInfos);
                             return new EmptyResult();
                         }

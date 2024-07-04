@@ -11,7 +11,6 @@ namespace AIMaestroProxy.Services
         {
             var db = redis.GetDatabase();
             var cacheKey = $"{category.ToCacheKey()}:{identifier}";
-            logger.LogDebug("Storing serialized data to cache: {serializedData}", data);
 
             db.StringSet(cacheKey, data);
         }
@@ -21,7 +20,6 @@ namespace AIMaestroProxy.Services
         {
             var db = redis.GetDatabase();
             var cacheKey = $"{category.ToCacheKey()}:{identifier}";
-            logger.LogDebug("Storing serialized data to cache: {serializedData}", data);
 
             await db.StringSetAsync(cacheKey, data);
         }
@@ -37,19 +35,18 @@ namespace AIMaestroProxy.Services
                 try
                 {
                     var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
-                    logger.LogDebug("Retrieved data from cache: {data}", JsonSerializer.Serialize(data));
                     return data;
                 }
                 catch (JsonException ex)
                 {
                     logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
                     db.KeyDelete(cacheKey);
-                    return null;
+                    return default;
                 }
             }
-
-            return null;
+            return default;
         }
+
 
         public async Task<T?> GetCachedDataAsync<T>(CacheCategory category, string identifier) where T : class
         {
@@ -62,18 +59,17 @@ namespace AIMaestroProxy.Services
                 try
                 {
                     var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
-                    logger.LogDebug("Retrieved data from cache: {data}", JsonSerializer.Serialize(data));
                     return data;
                 }
                 catch (JsonException ex)
                 {
                     logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
                     await db.KeyDeleteAsync(cacheKey);
-                    return null;
+                    return default;
                 }
             }
 
-            return null;
+            return default;
         }
     }
 }
