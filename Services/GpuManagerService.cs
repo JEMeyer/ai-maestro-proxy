@@ -7,7 +7,6 @@ namespace AIMaestroProxy.Services
     public class GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
     {
         private readonly DataService dataService = dataService;
-        private readonly IConnectionMultiplexer redis = redis;
         private readonly ILogger<GpuManagerService> logger = logger;
         private readonly ISubscriber subscriber = redis.GetSubscriber();
         private readonly object lockObject = new();
@@ -19,11 +18,9 @@ namespace AIMaestroProxy.Services
             try
             {
                 logger.LogDebug("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
-                var db = redis.GetDatabase();
                 var unlocked = gpuIds.All(gpuId =>
                         {
-                            var value = db.StringGet($"gpu-lock:{gpuId}");
-                            bool isUnlocked = value.IsNull || value == (RedisValue)false;
+                            bool isUnlocked = !dataService.GetGpuLock(gpuId);
                             logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
                             return isUnlocked;
                         });
@@ -32,7 +29,7 @@ namespace AIMaestroProxy.Services
                     logger.LogDebug("Locking gpus : {GpuIds}", string.Join(", ", gpuIds));
                     foreach (var gpuId in gpuIds)
                     {
-                        db.StringSet($"gpu-lock:{gpuId}", true);
+                        dataService.SetGpuLock(gpuId, true);
                     }
                     var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "1");
                     subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
@@ -53,10 +50,9 @@ namespace AIMaestroProxy.Services
             lock (lockObject)
             {
                 logger.LogDebug("Unlocking gpus  : {GpuIds}", string.Join(", ", gpuIds));
-                var db = redis.GetDatabase();
                 foreach (var gpuId in gpuIds)
                 {
-                    db.StringSet($"gpu-lock:{gpuId}", false);
+                    dataService.SetGpuLock(gpuId, false);
                 }
                 var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "0");
                 var message = JsonSerializer.Serialize(unlockedGpus);

@@ -1,45 +1,79 @@
 using System.Text.Json;
-using AIMaestroProxy.Models;
+using AIMaestroProxy.Enums;
+using AIMaestroProxy.Extensions;
 using StackExchange.Redis;
 
 namespace AIMaestroProxy.Services
 {
     public class CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
     {
-        public async Task CacheModelAssignmentsAsync(string modelName, IEnumerable<ModelAssignment> modelAssignments)
+        public void CacheData(CacheCategory category, string identifier, string data)
         {
             var db = redis.GetDatabase();
-            var cacheKey = $"model-assignments:{modelName}";
+            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+            logger.LogDebug("Storing serialized data to cache: {serializedData}", data);
 
-            var serializedModelAssignments = JsonSerializer.Serialize(modelAssignments);
-            logger.LogDebug("Storing serialized modelAssignments to cache: {serializedModelAssignments}", serializedModelAssignments);
-
-            await db.StringSetAsync(cacheKey, serializedModelAssignments);
+            db.StringSet(cacheKey, data);
         }
 
-        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentsAsync(string modelName)
+        public async Task CacheDataAsync(
+            CacheCategory category, string identifier, string data)
         {
             var db = redis.GetDatabase();
-            var cacheKey = $"model-assignments:{modelName}";
+            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+            logger.LogDebug("Storing serialized data to cache: {serializedData}", data);
 
-            var cachedModelAssignments = await db.StringGetAsync(cacheKey);
-            if (cachedModelAssignments.HasValue)
+            await db.StringSetAsync(cacheKey, data);
+        }
+
+        public T? GetCachedData<T>(CacheCategory category, string identifier) where T : class
+        {
+            var db = redis.GetDatabase();
+            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+
+            var cachedData = db.StringGet(cacheKey);
+            if (cachedData.HasValue)
             {
                 try
                 {
-                    var modelAssignments = JsonSerializer.Deserialize<IEnumerable<ModelAssignment>>(cachedModelAssignments.ToString());
-                    logger.LogDebug("Retrieved modelAssignments from cache: {modelAssignments}", JsonSerializer.Serialize(modelAssignments));
-                    return modelAssignments ?? [];
+                    var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
+                    logger.LogDebug("Retrieved data from cache: {data}", JsonSerializer.Serialize(data));
+                    return data;
                 }
                 catch (JsonException ex)
                 {
-                    logger.LogError(ex, "Error deserializing modelAssignments from cache - removing item from cache.");
-                    await db.KeyDeleteAsync(cacheKey); // Delete the corrupted cache entry
-                    return [];
+                    logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
+                    db.KeyDelete(cacheKey);
+                    return null;
                 }
             }
 
-            return [];
+            return null;
+        }
+
+        public async Task<T?> GetCachedDataAsync<T>(CacheCategory category, string identifier) where T : class
+        {
+            var db = redis.GetDatabase();
+            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+
+            var cachedData = await db.StringGetAsync(cacheKey);
+            if (cachedData.HasValue)
+            {
+                try
+                {
+                    var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
+                    logger.LogDebug("Retrieved data from cache: {data}", JsonSerializer.Serialize(data));
+                    return data;
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
+                    await db.KeyDeleteAsync(cacheKey);
+                    return null;
+                }
+            }
+
+            return null;
         }
     }
 }

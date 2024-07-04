@@ -1,3 +1,5 @@
+using System.Text.Json;
+using AIMaestroProxy.Enums;
 using AIMaestroProxy.Models;
 using static AIMaestroProxy.Models.PathCategories;
 
@@ -11,18 +13,16 @@ namespace AIMaestroProxy.Services
             try
             {
                 logger.LogDebug("Getting modelAssignments for model: {modelName}", modelName);
-                var cachedModelAssignments = await cacheService.GetModelAssignmentsAsync(modelName);
-                if (cachedModelAssignments.Any())
+                var cachedModelAssignments = await cacheService.GetCachedDataAsync<IEnumerable<ModelAssignment>>(CacheCategory.ModelAssignments, modelName);
+                if (cachedModelAssignments != null && cachedModelAssignments.Any())
                 {
-                    logger.LogDebug("Found cached modelAssignments for model: {modelName}", modelName);
                     return cachedModelAssignments;
                 }
 
                 var modelAssignments = await databaseService.GetModelAssignmentsAsync(modelName);
                 if (modelAssignments.Any())
                 {
-                    logger.LogDebug("Found modelAssignments for model: {modelName}, saving to cache.", modelName);
-                    await cacheService.CacheModelAssignmentsAsync(modelName, modelAssignments);
+                    await cacheService.CacheDataAsync(CacheCategory.ModelAssignments, modelName, JsonSerializer.Serialize(modelAssignments));
                 }
 
                 return modelAssignments;
@@ -36,14 +36,39 @@ namespace AIMaestroProxy.Services
 
         public async Task<IEnumerable<ContainerInfo>> GetContainerInfosAsync(PathFamily pathFamily)
         {
-            var containerInfos = await databaseService.GetContainerInfosAsync(pathFamily);
-            return containerInfos;
+            try
+            {
+                logger.LogDebug("Getting containerInfos for family: {fam}", pathFamily);
+                string pathFamilyString = pathFamily.ToString();
+                var cahcedContainerInfos = await cacheService.GetCachedDataAsync<IEnumerable<ContainerInfo>>(CacheCategory.ContainerInfos, pathFamilyString);
+                if (cahcedContainerInfos != null && cahcedContainerInfos.Any())
+                {
+                    return cahcedContainerInfos;
+                }
+
+                var containerInfos = await databaseService.GetContainerInfosAsync(pathFamily);
+                if (containerInfos.Any())
+                {
+                    await cacheService.CacheDataAsync(CacheCategory.ContainerInfos, pathFamilyString, JsonSerializer.Serialize(containerInfos));
+                }
+
+                return containerInfos;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in GetContainerInfosAsync for family {modelName}", pathFamily);
+                throw;
+            }
         }
 
-
-        public async Task CacheModelAssignmentsAsync(string modelName, IEnumerable<ModelAssignment> modelAssignments)
+        public bool GetGpuLock(string gpuId)
         {
-            await cacheService.CacheModelAssignmentsAsync(modelName, modelAssignments);
+            return bool.Parse(cacheService.GetCachedData<string>(CacheCategory.GpuLock, gpuId) ?? "False");
+        }
+
+        public void SetGpuLock(string gpuId, bool lockState)
+        {
+            cacheService.CacheData(CacheCategory.GpuLock, gpuId, lockState.ToString());
         }
     }
 }

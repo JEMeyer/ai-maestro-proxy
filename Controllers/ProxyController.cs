@@ -12,17 +12,17 @@ namespace AIMaestroProxy.Controllers
                                DataService dataService,
                                ILogger<ProxyController> logger) : ControllerBase
     {
-
-        [HttpGet("")]
-        public async Task<IActionResult> HealthCheck()
+        [HttpGet("{*path}")]
+        public async Task<IActionResult> Get([FromRoute] string? path)
         {
-            return await HandleRequest(HttpMethod.Get, string.Empty);
+            return await HandleRequest(HttpMethod.Get, path ?? string.Empty);
         }
 
-        [HttpGet("{*path}")]
-        public async Task<IActionResult> Get([FromRoute] string path)
+
+        [HttpHead("{*path}")]
+        public async Task<IActionResult> Head([FromRoute] string? path)
         {
-            return await HandleRequest(HttpMethod.Get, path);
+            return await HandleRequest(HttpMethod.Head, path ?? string.Empty);
         }
 
         [HttpPost("{*path}")]
@@ -30,6 +30,7 @@ namespace AIMaestroProxy.Controllers
         {
             return await HandleRequest(HttpMethod.Post, path);
         }
+
         [HttpPut("{*path}")]
         public async Task<IActionResult> Put([FromRoute] string path)
         {
@@ -40,12 +41,6 @@ namespace AIMaestroProxy.Controllers
         public async Task<IActionResult> Delete([FromRoute] string path)
         {
             return await HandleRequest(HttpMethod.Delete, path);
-        }
-
-        [HttpHead("{*path}")]
-        public async Task<IActionResult> Head([FromRoute] string path)
-        {
-            return await HandleRequest(HttpMethod.Head, path);
         }
 
         [HttpOptions("{*path}")]
