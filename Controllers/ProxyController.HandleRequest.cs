@@ -45,12 +45,11 @@ namespace AIMaestroProxy.Controllers
                         if (pathCategories.Value.LoopingServerPaths.Contains(path))
                         {
                             logger.LogDebug("Looping request");
-                            var forceChunked = path.StartsWith("api/tags");
-                            await proxiedRequestService.RouteLoopingRequestAsync(context, path, allContainerInfos, forceChunked);
+                            await proxiedRequestService.RouteLoopingRequestAsync(context, path, allContainerInfos);
                             return new EmptyResult();
                         }
 
-                        // Otherwise pick a container. check the body for a name/model
+                        // Otherwise pick a container. Check the body for a name/model
                         var requiredModel = RequestModelParser.GetModelLookupKey(body);
                         var containerInfos = allContainerInfos
                             .Where(item => string.IsNullOrEmpty(requiredModel) ||

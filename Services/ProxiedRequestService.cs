@@ -50,7 +50,7 @@ namespace AIMaestroProxy.Services
         }
 
         // TODO: This can take in the prop(s) that are supposed to get concated. can also pick some to not concat and just replace, etc
-        public async Task RouteLoopingRequestAsync(HttpContext context, string path, IEnumerable<ContainerInfo> containerInfos, bool forceChunked = false)
+        public async Task RouteLoopingRequestAsync(HttpContext context, string path, IEnumerable<ContainerInfo> containerInfos)
         {
             logger.LogDebug("Handling looping request for {path}", path);
             var modelsList = new List<JsonElement>();
@@ -81,11 +81,11 @@ namespace AIMaestroProxy.Services
                 Content = resultContent
             };
 
-            // Use HandleResponseAsync to handle the final response, with the forceChunked flag
-            await HandleResponseAsync(context, finalResponse, forceChunked);
+            // Use HandleResponseAsync to handle the final response
+            await HandleResponseAsync(context, finalResponse);
         }
 
-        private static async Task HandleResponseAsync(HttpContext context, HttpResponseMessage response, bool isChunked = false)
+        private static async Task HandleResponseAsync(HttpContext context, HttpResponseMessage response)
         {
             context.Response.StatusCode = (int)response.StatusCode;
 
@@ -101,39 +101,17 @@ namespace AIMaestroProxy.Services
 
             context.Response.Headers.Remove("Transfer-Encoding");
 
-            if (isChunked)
+            if (response.Content.Headers.ContentLength.HasValue)
             {
-                context.Response.Headers.TransferEncoding = "chunked";
-
-                var chunkSize = 8192;
-                var buffer = new byte[chunkSize];
-                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
-                int bytesRead;
-
-                while ((bytesRead = await responseStream.ReadAsync(buffer, context.RequestAborted)) > 0)
-                {
-                    var chunkHeader = $"{bytesRead:X}\r\n";
-                    await context.Response.Body.WriteAsync(Encoding.ASCII.GetBytes(chunkHeader), context.RequestAborted);
-                    await context.Response.Body.WriteAsync(buffer.AsMemory(0, bytesRead), context.RequestAborted);
-                    await context.Response.Body.WriteAsync(Encoding.ASCII.GetBytes("\r\n"), context.RequestAborted);
-                }
-
-                await context.Response.Body.WriteAsync(Encoding.ASCII.GetBytes("0\r\n\r\n"), context.RequestAborted); // End of chunks
+                context.Response.ContentLength = response.Content.Headers.ContentLength.Value;
+                var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
+                await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
             }
-            else
+            else if (response.Headers.TransferEncodingChunked == true)
             {
-                if (response.Content.Headers.ContentLength.HasValue)
-                {
-                    context.Response.ContentLength = response.Content.Headers.ContentLength.Value;
-                    var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
-                    await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
-                }
-                else
-                {
-                    context.Response.ContentLength = null;
-                    await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
-                    await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
-                }
+                context.Response.Headers.Remove("Content-Length");
+                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
+                await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
             }
         }
     }

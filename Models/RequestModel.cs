@@ -24,6 +24,7 @@ namespace AIMaestroProxy.Models
             }
             lookupKey ??= string.Empty;
 
+            // We don't have :latest in the database, so if that is present, just rip it off
             if (lookupKey.EndsWith(":latest"))
                 lookupKey = lookupKey[..^7];
 
