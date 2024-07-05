@@ -10,8 +10,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
 
-builder.WebHost.UseKestrel(options => options.AddServerHeader = false);
-
 // Load Config values
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
