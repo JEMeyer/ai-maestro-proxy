@@ -21,16 +21,17 @@ namespace AIMaestroProxy.Services
                 var unlocked = gpuIds.All(gpuId =>
                         {
                             var gpuLock = dataService.GetGpuLock(gpuId);
-                            if (gpuLock == null) return true;
-                            logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, gpuLock.IsLocked ? "Locked" : "Unlocked");
-                            return !gpuLock.IsLocked;
+                            var isUnlocked = gpuLock == null || gpuLock.ModelInUse == string.Empty;
+
+                            logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
+                            return isUnlocked;
                         });
                 if (unlocked)
                 {
                     logger.LogDebug("Locking : {GpuIds}", string.Join(", ", gpuIds));
                     foreach (var gpuId in gpuIds)
                     {
-                        dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = modelName, IsLocked = true });
+                        dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = modelName });
                     }
                     var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => modelName);
                     subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
@@ -53,7 +54,7 @@ namespace AIMaestroProxy.Services
                 logger.LogDebug("Unlocking gpus : {GpuIds}", string.Join(", ", gpuIds));
                 foreach (var gpuId in gpuIds)
                 {
-                    dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = string.Empty, IsLocked = false });
+                    dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = string.Empty });
                 }
                 var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "");
                 var message = JsonSerializer.Serialize(unlockedGpus);
