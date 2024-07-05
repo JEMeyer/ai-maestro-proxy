@@ -32,7 +32,7 @@ namespace AIMaestroProxy.Services
                     {
                         dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = modelName, IsLocked = true });
                     }
-                    var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "1");
+                    var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => modelName);
                     subscriber.Publish(GpuLockChangesChannel, JsonSerializer.Serialize(lockedGpus));
                     return true;
                 }
@@ -50,12 +50,12 @@ namespace AIMaestroProxy.Services
         {
             lock (lockObject)
             {
-                logger.LogDebug("Unlocking gpus  : {GpuIds}", string.Join(", ", gpuIds));
+                logger.LogDebug("Unlocking gpus : {GpuIds}", string.Join(", ", gpuIds));
                 foreach (var gpuId in gpuIds)
                 {
                     dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = string.Empty, IsLocked = false });
                 }
-                var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "0");
+                var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "");
                 var message = JsonSerializer.Serialize(unlockedGpus);
                 subscriber.Publish(GpuLockChangesChannel, message);
                 gpusFreedEvent.Set();
