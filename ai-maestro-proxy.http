@@ -1,10 +1,22 @@
 ###
+### GPU ENDPOINTS
+###
+
+### Reserve a model
+POST {{proxyHost}}/gpu/reserve/codestral
+Content-Type: application/json
+
+### Release a model
+POST {{proxyHost}}/gpu/release/2
+Content-Type: application/json
+
+###
 ### DIFFUSION ENDPOINTS
 ###
 
 ###
 ### Generate an image with sdxl-turbo
-POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
+POST {{proxyHost}}/txt2img
 Content-Type: application/json
 
 {
@@ -13,7 +25,7 @@ Content-Type: application/json
 }
 
 ### Generate an image with sd-turbo
-POST {{baseProxyUrl}}:{{proxyPort}}/txt2img
+POST {{proxyHost}}/txt2img
 Content-Type: application/json
 
 {
@@ -26,7 +38,7 @@ Content-Type: application/json
 ###
 
 ### Chat request, JSON
-POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
+POST {{proxyHost}}/api/chat
 Content-Type: application/json
 
 {
@@ -36,7 +48,7 @@ Content-Type: application/json
 }
 
 ### Chat request, streaming
-POST {{baseProxyUrl}}:{{proxyPort}}/api/chat
+POST {{proxyHost}}/api/chat
 Content-Type: application/json
 
 {
@@ -45,7 +57,7 @@ Content-Type: application/json
 }
 
 ### Generate request, streaming
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+POST {{proxyHost}}/api/generate
 Content-Type: application/json
 
 {
@@ -55,7 +67,7 @@ Content-Type: application/json
 
 
 ### Generate request, JSON
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+POST {{proxyHost}}/api/generate
 Content-Type: application/json
 
 {
@@ -67,7 +79,7 @@ Content-Type: application/json
 
 
 ### Multi-modal test
-POST {{baseProxyUrl}}:{{proxyPort}}/api/generate
+POST {{proxyHost}}/api/generate
 Content-Type: application/json
 
 {
@@ -80,23 +92,23 @@ Content-Type: application/json
 ### Non-compute Ollama calls
 
 ### Healthcheck NOT CHUNKED
-GET {{baseProxyUrl}}:{{proxyPort}}
+GET {{proxyHost}}
 Content-Type: application/json
 
 ### Get running containers NOT CHUNKED
-GET {{baseProxyUrl}}:{{proxyPort}}/api/ps
+GET {{proxyHost}}/api/ps
 Content-Type: application/json
 
 ### Get loaded models CHUNKED
-GET {{baseProxyUrl}}:{{proxyPort}}/api/tags
+GET {{proxyHost}}/api/tags
 Content-Type: application/json
 
 ### Get Ollama version NOT CHUNKED
-GET {{baseProxyUrl}}:{{proxyPort}}/api/version
+GET {{proxyHost}}/api/version
 Content-Type: application/json
 
 ### Get model info (by posting) CHUNKED
-POST {{baseProxyUrl}}:{{proxyPort}}/api/show
+POST {{proxyHost}}/api/show
 Content-Type: application/json
 
 {
