@@ -5,7 +5,7 @@ namespace AIMaestroProxy.Controllers
 {
     [ApiController]
     [Route("gpu")]
-    public class GpuController(ILogger<OpenAIController> logger, GpuManagerService gpuManagerService) : ControllerBase
+    public class GpuController(ILogger<GpuController> logger, GpuManagerService gpuManagerService) : ControllerBase
     {
         [HttpPost("reserve/{modelName}")]
         public async Task<IActionResult> ReserveGpu(string modelName)
@@ -39,6 +39,21 @@ namespace AIMaestroProxy.Controllers
             {
                 logger.LogError(ex, "Error releasing gpus");
                 return BadRequest(new { Message = "Failed to release GPU(s)" });
+            }
+        }
+
+        [HttpPost("ping/{gpuIds}")]
+        public IActionResult PingGpu(string gpuIds)
+        {
+            try
+            {
+                gpuManagerService.RefreshGpuActivity(gpuIds.Split(','));
+                return new JsonResult(new { Message = "Ping successful" });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error handling ping request");
+                return StatusCode(500, "Internal server error");
             }
         }
     }
