@@ -5,114 +5,117 @@ using AIMaestroProxy.Models;
 
 namespace AIMaestroProxy.Services
 {
-    public class ProxiedRequestService(HttpClient httpClient, ILogger<ProxiedRequestService> logger)
+    public class ProxiedRequestService(
+        HttpClient httpClient,
+        ILogger<ProxiedRequestService> logger
+    )
     {
-        public async Task RouteRequestAsync(HttpContext context, ModelAssignment modelAssignment, HttpMethod method, string? body)
+        /// <summary>
+        /// Routes the request to the target container and streams the response back to the client.
+        /// </summary>
+        public async Task RouteRequestAsync(
+            HttpContext context,
+            ModelAssignment modelAssignment,
+            HttpMethod method,
+            string? body
+        )
         {
             var path = context.Request.Path.ToString();
             var queryString = context.Request.QueryString.ToString();
             var requestUri = $"http://{modelAssignment.Ip}:{modelAssignment.Port}{path}{queryString}";
 
-            var httpRequest = new HttpRequestMessage(method, requestUri);
+            using var httpRequest = new HttpRequestMessage(method, requestUri);
 
+            // Attach body if necessary
             if (method != HttpMethod.Get && method != HttpMethod.Head && !string.IsNullOrEmpty(body))
             {
-                var content = new StringContent(body, Encoding.UTF8, "application/json");
-                httpRequest.Content = content;
+                httpRequest.Content = new StringContent(body, Encoding.UTF8, "application/json");
             }
 
+            // Copy request headers, excluding hop-by-hop headers
             foreach (var header in context.Request.Headers)
             {
-                httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
+                if (!ShouldSkipHeader(header.Key))
+                {
+                    httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
+                }
             }
 
             try
             {
-                using var response = await httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
-                await HandleResponseAsync(context, response);
+                // Send the request with streaming response
+                using var response = await httpClient.SendAsync(
+                    httpRequest,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    context.RequestAborted
+                );
+
+                // Set the response status code
+                context.Response.StatusCode = (int)response.StatusCode;
+
+                // Copy response headers, excluding hop-by-hop headers
+                foreach (var header in response.Headers)
+                {
+                    if (!ShouldSkipHeader(header.Key))
+                    {
+                        context.Response.Headers[header.Key] = header.Value.ToArray();
+                    }
+                }
+                foreach (var header in response.Content.Headers)
+                {
+                    if (!ShouldSkipHeader(header.Key))
+                    {
+                        context.Response.Headers[header.Key] = header.Value.ToArray();
+                    }
+                }
+
+                // Remove Transfer-Encoding if present to avoid issues
+                context.Response.Headers.Remove("Transfer-Encoding");
+
+                // Stream the response content directly to the client
+                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
+                await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
             }
             catch (TaskCanceledException ex)
             {
+                // Handle client disconnects gracefully
                 if (!context.Response.HasStarted)
                 {
-                    logger.LogError("Request was canceled: {ex}", ex);
+                    logger.LogError(ex, "Request was canceled by the client.");
                     context.Response.StatusCode = StatusCodes.Status408RequestTimeout;
                 }
             }
             catch (Exception ex)
             {
+                // Handle other exceptions
                 if (!context.Response.HasStarted)
                 {
-                    logger.LogError("Error routing request: {ex}", ex);
+                    logger.LogError(ex, "Error routing request.");
                     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
                 }
             }
         }
 
-        // TODO: This can take in the prop(s) that are supposed to get concated. can also pick some to not concat and just replace, etc
-        public async Task RouteLoopingRequestAsync(HttpContext context, string path, IEnumerable<ContainerInfo> containerInfos)
+        /// <summary>
+        /// Determines if a header should be skipped when copying.
+        /// </summary>
+        private static bool ShouldSkipHeader(string headerKey)
         {
-            logger.LogDebug("Handling looping request for {path}", path);
-            var modelsList = new List<JsonElement>();
-
-            foreach (var container in containerInfos)
+            // List of hop-by-hop headers to skip
+            var hopByHopHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                var targetUri = new Uri($"http://{container.Ip}:{container.Port}/{path}{context.Request.QueryString}");
-                var proxyRequest = new HttpRequestMessage(HttpMethod.Get, targetUri);
-
-                foreach (var header in context.Request.Headers)
-                {
-                    proxyRequest.Headers.TryAddWithoutValidation(header.Key, header.Value.ToArray());
-                }
-
-                using var response = await httpClient.SendAsync(proxyRequest, HttpCompletionOption.ResponseHeadersRead, context.RequestAborted);
-                var responseBody = await response.Content.ReadAsStringAsync(context.RequestAborted);
-                var models = JsonDocument.Parse(responseBody).RootElement.GetProperty("models").EnumerateArray();
-
-                modelsList.AddRange(models);
-            }
-
-            var result = new { models = modelsList };
-            var resultJson = JsonSerializer.Serialize(result);
-            var resultContent = new StringContent(resultJson, Encoding.UTF8, "application/json");
-
-            var finalResponse = new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = resultContent
+                "Connection",
+                "Keep-Alive",
+                "Proxy-Authenticate",
+                "Proxy-Authorization",
+                "TE",
+                "Trailer",
+                "Transfer-Encoding",
+                "Upgrade",
+                "Host"
             };
 
-            // Use HandleResponseAsync to handle the final response
-            await HandleResponseAsync(context, finalResponse);
-        }
-
-        private static async Task HandleResponseAsync(HttpContext context, HttpResponseMessage response)
-        {
-            context.Response.StatusCode = (int)response.StatusCode;
-
-            foreach (var header in response.Headers)
-            {
-                context.Response.Headers[header.Key] = header.Value.ToArray();
-            }
-
-            foreach (var header in response.Content.Headers)
-            {
-                context.Response.Headers[header.Key] = header.Value.ToArray();
-            }
-
-            context.Response.Headers.Remove("Transfer-Encoding");
-
-            if (response.Content.Headers.ContentLength.HasValue)
-            {
-                context.Response.ContentLength = response.Content.Headers.ContentLength.Value;
-                var responseContent = await response.Content.ReadAsByteArrayAsync(context.RequestAborted);
-                await context.Response.Body.WriteAsync(responseContent, context.RequestAborted);
-            }
-            else if (response.Headers.TransferEncodingChunked == true)
-            {
-                context.Response.Headers.Remove("Content-Length");
-                await using var responseStream = await response.Content.ReadAsStreamAsync(context.RequestAborted);
-                await responseStream.CopyToAsync(context.Response.Body, context.RequestAborted);
-            }
+            return hopByHopHeaders.Contains(headerKey);
         }
     }
 }
