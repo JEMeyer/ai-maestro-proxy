@@ -1,12 +1,15 @@
+// Services/GpuManagerService.cs
 using System.Text.Json;
 using AIMaestroProxy.Models;
 using StackExchange.Redis;
 using System.Collections.Concurrent;
+using static AIMaestroProxy.Models.PathCategories;
 
 namespace AIMaestroProxy.Services
 {
     public partial class GpuManagerService : IDisposable
     {
+        private readonly DatabaseService databaseService;
         private readonly DataService dataService;
         private readonly ILogger<GpuManagerService> logger;
         private readonly ISubscriber subscriber;
@@ -17,8 +20,9 @@ namespace AIMaestroProxy.Services
         private readonly TimeSpan _timeout = TimeSpan.FromMinutes(1);
         private readonly Timer? _timer;
 
-        public GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
+        public GpuManagerService(DatabaseService databaseService, DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
         {
+            this.databaseService = databaseService;
             this.dataService = dataService;
             this.logger = logger;
             this.subscriber = redis.GetSubscriber();
@@ -28,7 +32,7 @@ namespace AIMaestroProxy.Services
         }
 
         /// <summary>
-        /// Runs every 30 seconds to release any gpus that are stuck - if inactive for more than 1 min will be released
+        /// Runs every 30 seconds to release any GPUs that are stuck - if inactive for more than 1 min will be released
         /// </summary>
         private void ReleaseStuckGPUs()
         {
@@ -44,7 +48,7 @@ namespace AIMaestroProxy.Services
             }
         }
 
-        // Returns false if no gpu was available, otherwise true to indicate you locked it
+        // Returns false if no GPU was available, otherwise true to indicate you locked it
         private bool TryLockGPUs(string[] gpuIds, string modelName)
         {
             try
@@ -53,7 +57,7 @@ namespace AIMaestroProxy.Services
                 var unlocked = gpuIds.All(gpuId =>
                 {
                     var gpuLock = dataService.GetGpuLock(gpuId);
-                    var isUnlocked = gpuLock == null || gpuLock.ModelInUse == string.Empty;
+                    var isUnlocked = gpuLock == null || string.IsNullOrEmpty(gpuLock.ModelInUse);
                     logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
                     return isUnlocked;
                 });
@@ -83,22 +87,22 @@ namespace AIMaestroProxy.Services
         {
             lock (lockObject)
             {
-                logger.LogDebug("Unlocking gpus : {GpuIds}", string.Join(", ", gpuIds));
+                logger.LogDebug("Unlocking GPUs : {GpuIds}", string.Join(", ", gpuIds));
                 foreach (var gpuId in gpuIds)
                 {
                     dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = string.Empty });
                 }
-                var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => "");
+                var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, gpuId => "");
                 var message = JsonSerializer.Serialize(unlockedGpus);
                 subscriber.Publish(GpuLockChangesChannel, message);
                 gpusFreedEvent.Set();
             }
         }
 
-        public async Task<ModelAssignment?> GetAvailableModelAssignmentAsync(string modelName, CancellationToken cancellationToken)
+        public async Task<ModelAssignment?> GetAvailableModelAssignmentAsync(OutputType outputType, string? modelName, CancellationToken cancellationToken)
         {
             ArgumentException.ThrowIfNullOrEmpty(modelName);
-            var modelAssignments = await dataService.GetModelAssignmentsAsync(modelName);
+            var modelAssignments = await dataService.GetModelAssignmentsAsync(outputType, modelName);
             if (!modelAssignments.Any())
                 return null;
 
@@ -110,7 +114,7 @@ namespace AIMaestroProxy.Services
                 {
                     foreach (var modelAssignment in modelAssignments)
                     {
-                        var gpuIds = modelAssignment.GpuIds.Split(',');
+                        var gpuIds = modelAssignment.GpuIds.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(id => id.Trim()).ToArray();
                         if (TryLockGPUs(gpuIds, modelName))
                         {
                             logger.LogDebug("GPU(s) {GpuIds} reserved, returning modelAssignments.", string.Join(',', gpuIds));

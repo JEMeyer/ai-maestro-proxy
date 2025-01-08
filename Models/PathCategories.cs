@@ -1,20 +1,15 @@
 namespace AIMaestroProxy.Models
 {
-    public class PathCategories
+    public static class PathCategories
     {
         /// <summary>
-        /// Standard 'compute' requests that actually run the AI
+        /// The different types of servers/endpoints
         /// </summary>
-        public required List<string> GpuBoundPaths { get; set; }
-
-        /// <summary>
-        /// Whisper not listed due to laziness and also doens't need it since it's all compute
-        /// </summary>
-        public enum PathFamily
+        public enum OutputType
         {
-            Ollama,
-            Coqui,
-            Diffusion,
+            Text,
+            Speech,
+            Images,
             Unknown
         }
 
@@ -23,13 +18,29 @@ namespace AIMaestroProxy.Models
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
-        public PathFamily GetNonComputePathFamily(string path)
+        public static OutputType GetOutputTypeFromPath(string path)
         {
-            if (path == "" || path.StartsWith("api/")) return PathFamily.Ollama;
-            if (path.StartsWith("languages") || path.StartsWith("studio_speakers")) return PathFamily.Coqui;
-            if (path.StartsWith("upload")) return PathFamily.Diffusion;
+            if (path == "" || path.StartsWith("api/")) return OutputType.Text;
+            if (path.StartsWith("audio/")) return OutputType.Speech;
+            if (path.StartsWith("diffusion/")) return OutputType.Images;
 
-            return PathFamily.Unknown;
+            return OutputType.Unknown;
         }
+
+        public static OutputType GetOutputTypeFromString(string sType)
+        {
+            switch (sType)
+            {
+                case "textstring":
+                    return OutputType.Text;
+                case "speechstring":
+                    return OutputType.Speech;
+                case "imagesstring":
+                    return OutputType.Images;
+                default:
+                    return OutputType.Unknown;
+            }
+        }
+
     }
 }

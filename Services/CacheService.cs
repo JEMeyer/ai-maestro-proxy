@@ -1,75 +1,73 @@
 using System.Text.Json;
-using AIMaestroProxy.Enums;
-using AIMaestroProxy.Extensions;
+using AIMaestroProxy.Attributes;
 using StackExchange.Redis;
 
 namespace AIMaestroProxy.Services
 {
-    public class CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
+    public class CacheService
     {
-        public void CacheData(CacheCategory category, string identifier, string data)
-        {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+        private readonly IConnectionMultiplexer _redis;
+        private readonly ILogger<CacheService> _logger;
 
-            db.StringSet(cacheKey, data);
+        public CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
+        {
+            _redis = redis;
+            _logger = logger;
         }
 
-        public async Task CacheDataAsync(
-            CacheCategory category, string identifier, string data)
+        public async Task<T?> GetCachedDataAsync<T>(CacheCategory category, string key)
         {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+            var db = _redis.GetDatabase();
+            var serializedData = await db.StringGetAsync(GetRedisKey(category, key));
+            if (serializedData.IsNullOrEmpty)
+                return default;
 
-            await db.StringSetAsync(cacheKey, data);
-        }
-
-        public T? GetCachedData<T>(CacheCategory category, string identifier) where T : class
-        {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
-
-            var cachedData = db.StringGet(cacheKey);
-            if (cachedData.HasValue)
+            try
             {
-                try
-                {
-                    var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
-                    return data;
-                }
-                catch (JsonException ex)
-                {
-                    logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
-                    db.KeyDelete(cacheKey);
-                    return default;
-                }
+                return JsonSerializer.Deserialize<T>(serializedData);
             }
-            return default;
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize cache data for key: {Key}", key);
+                return default;
+            }
         }
 
-
-        public async Task<T?> GetCachedDataAsync<T>(CacheCategory category, string identifier) where T : class
+        public async Task CacheDataAsync<T>(CacheCategory category, string key, T data, TimeSpan? expiry = null)
         {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+            var db = _redis.GetDatabase();
+            string serializedData = JsonSerializer.Serialize(data);
+            await db.StringSetAsync(GetRedisKey(category, key), serializedData, expiry);
+        }
 
-            var cachedData = await db.StringGetAsync(cacheKey);
-            if (cachedData.HasValue)
+        public T? GetCachedData<T>(CacheCategory category, string key)
+        {
+            var db = _redis.GetDatabase();
+            var serializedData = db.StringGet(GetRedisKey(category, key));
+            if (serializedData.IsNullOrEmpty)
+                return default;
+
+            try
             {
-                try
-                {
-                    var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
-                    return data;
-                }
-                catch (JsonException ex)
-                {
-                    logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
-                    await db.KeyDeleteAsync(cacheKey);
-                    return default;
-                }
+                return JsonSerializer.Deserialize<T>(serializedData);
             }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize cache data for key: {Key}", key);
+                return default;
+            }
+        }
 
-            return default;
+        public void CacheData<T>(CacheCategory category, string key, T data, TimeSpan? expiry = null)
+        {
+            var db = _redis.GetDatabase();
+            string serializedData = JsonSerializer.Serialize(data);
+            db.StringSet(GetRedisKey(category, key), serializedData, expiry);
+        }
+
+        private string GetRedisKey(CacheCategory category, string key)
+        {
+            return $"{category}:{key}";
         }
     }
 }
