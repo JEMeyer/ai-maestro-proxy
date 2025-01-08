@@ -1,8 +1,7 @@
-namespace AIMaestroProxy.Enums
+namespace AIMaestroProxy.Attributes
 {
     public enum CacheCategory
     {
-        ContainerInfos,
         GpuLock,
         ModelAssignments
     }

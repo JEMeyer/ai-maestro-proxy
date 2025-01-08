@@ -1,5 +1,5 @@
 using System.Text.Json;
-using AIMaestroProxy.Enums;
+using AIMaestroProxy.Attributes;
 using AIMaestroProxy.Models;
 using static AIMaestroProxy.Models.PathCategories;
 
@@ -8,67 +8,79 @@ namespace AIMaestroProxy.Services
 {
     public class DataService(CacheService cacheService, DatabaseService databaseService, ILogger<DataService> logger)
     {
-        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentsAsync(string modelName)
+        private readonly CacheService _cacheService = cacheService;
+        private readonly DatabaseService _databaseService = databaseService;
+        private readonly ILogger<DataService> _logger = logger;
+
+        /// <summary>
+        /// Retrieves model assignments based on service name and optionally model name.
+        /// </summary>
+        /// <param name="OutputType">The service name to filter assignments.</param>
+        /// <param name="modelName">Optional model name to further filter assignments.</param>
+        /// <returns>A list of ModelAssignment objects.</returns>
+        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentsAsync(OutputType OutputType, string? modelName = null)
         {
             try
             {
-                logger.LogDebug("Getting modelAssignments for model: {modelName}", modelName);
-                var cachedModelAssignments = await cacheService.GetCachedDataAsync<IEnumerable<ModelAssignment>>(CacheCategory.ModelAssignments, modelName);
-                if (cachedModelAssignments != null && cachedModelAssignments.Any())
+                string cacheKey = GenerateCacheKey(OutputType, modelName);
+                _logger.LogDebug("Fetching ModelAssignments with key: {cacheKey}", cacheKey);
+
+                var cachedData = await _cacheService.GetCachedDataAsync<IEnumerable<ModelAssignment>>(CacheCategory.ModelAssignments, cacheKey);
+
+                if (cachedData != null && cachedData.Any())
                 {
-                    return cachedModelAssignments;
+                    _logger.LogDebug("Cache hit for key: {cacheKey}", cacheKey);
+                    return cachedData;
                 }
 
-                var modelAssignments = await databaseService.GetModelAssignmentsAsync(modelName);
+                _logger.LogDebug("Cache miss for key: {cacheKey}. Fetching from database.", cacheKey);
+                IEnumerable<ModelAssignment> modelAssignments;
+
+                if (!string.IsNullOrEmpty(modelName))
+                {
+                    _logger.LogDebug("Fetching assignments by model: {modelName}", modelName);
+                    modelAssignments = await _databaseService.GetModelAssignmentsByModelAsync(modelName);
+                }
+                else
+                {
+                    _logger.LogDebug("Fetching assignments by service: {OutputType}", OutputType);
+                    modelAssignments = await _databaseService.GetModelAssignmentByServiceAsync(OutputType);
+                }
+
                 if (modelAssignments.Any())
                 {
-                    await cacheService.CacheDataAsync(CacheCategory.ModelAssignments, modelName, JsonSerializer.Serialize(modelAssignments));
+                    string serializedData = JsonSerializer.Serialize(modelAssignments);
+                    await _cacheService.CacheDataAsync(CacheCategory.ModelAssignments, cacheKey, serializedData);
+                    _logger.LogDebug("Cached data for key: {cacheKey}", cacheKey);
                 }
 
                 return modelAssignments;
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error in GetModelAssignmentsAsync for model {modelName}", modelName);
+                _logger.LogError(ex, "Error in GetModelAssignmentsAsync for service {OutputType} and model {modelName}", OutputType, modelName);
                 throw;
             }
         }
 
-        public async Task<IEnumerable<ContainerInfo>> GetContainerInfosAsync(PathFamily pathFamily)
+        /// <summary>
+        /// Generates a standardized cache key based on service and model names.
+        /// </summary>
+        private static string GenerateCacheKey(OutputType OutputType, string? modelName)
         {
-            try
-            {
-                logger.LogDebug("Getting containerInfos for family: {fam}", pathFamily);
-                string pathFamilyString = pathFamily.ToString();
-                var cahcedContainerInfos = await cacheService.GetCachedDataAsync<IEnumerable<ContainerInfo>>(CacheCategory.ContainerInfos, pathFamilyString);
-                if (cahcedContainerInfos != null && cahcedContainerInfos.Any())
-                {
-                    return cahcedContainerInfos;
-                }
-
-                var containerInfos = await databaseService.GetContainerInfosAsync(pathFamily);
-                if (containerInfos.Any())
-                {
-                    await cacheService.CacheDataAsync(CacheCategory.ContainerInfos, pathFamilyString, JsonSerializer.Serialize(containerInfos));
-                }
-
-                return containerInfos;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error in GetContainerInfosAsync for family {modelName}", pathFamily);
-                throw;
-            }
+            return "model-assignments:" + (string.IsNullOrEmpty(modelName)
+                ? $"{OutputType.ToFriendlyString()}"
+                : $"{OutputType.ToFriendlyString()}:{modelName}");
         }
 
         public GpuLock? GetGpuLock(string gpuId)
         {
-            return cacheService.GetCachedData<GpuLock>(CacheCategory.GpuLock, gpuId);
+            return _cacheService.GetCachedData<GpuLock>(CacheCategory.GpuLock, gpuId);
         }
 
         public void SetGpuLock(string gpuId, GpuLock gpuLock)
         {
-            cacheService.CacheData(CacheCategory.GpuLock, gpuId, JsonSerializer.Serialize(gpuLock));
+            _cacheService.CacheData(CacheCategory.GpuLock, gpuId, gpuLock, TimeSpan.FromMinutes(10));
         }
     }
 }

@@ -3,11 +3,16 @@
 ###
 
 ### Reserve a model
-POST {{proxyHost}}/gpu/reserve/codestral
+POST {{proxyHost}}/gpus/reserve
 Content-Type: application/json
 
+{
+  "modelName": "codestral",
+  "outputType": "llms"
+}
+
 ### Release a model
-POST {{proxyHost}}/gpu/release/2
+POST {{proxyHost}}/gpus/release/2
 Content-Type: application/json
 
 ###

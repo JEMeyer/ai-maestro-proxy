@@ -1,6 +1,6 @@
+using AIMaestroProxy.Controllers;
 using AIMaestroProxy.Logging;
 using AIMaestroProxy.Middleware;
-using AIMaestroProxy.Models;
 using AIMaestroProxy.Services;
 using Microsoft.Extensions.Logging.Console;
 using MySql.Data.MySqlClient;
@@ -40,9 +40,6 @@ builder.Services.AddSingleton<DataService>();
 builder.Services.AddSingleton<GpuManagerService>();
 builder.Services.AddControllers();
 
-// Load up endpoints from config. Dynamic for idk why, someone can use this with any backend.
-builder.Services.Configure<PathCategories>(builder.Configuration.GetSection("PathCategories"));
-
 // Add transient HttpClient service for proxied requests
 builder.Services.AddHttpClient<ProxiedRequestService>();
 
@@ -63,5 +60,21 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{*path}",
     defaults: new { controller = "Proxy", action = "HandleRequest" });
+
+// Enable WebSockets
+app.UseWebSockets();
+
+app.Map("/ws", async context =>
+{
+    if (context.WebSockets.IsWebSocketRequest)
+    {
+        var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+        await WebSocketHandler.HandleWebSocketAsync(webSocket);
+    }
+    else
+    {
+        context.Response.StatusCode = 400;
+    }
+});
 
 app.Run();
