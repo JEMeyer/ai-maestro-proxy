@@ -24,7 +24,7 @@ namespace AIMaestroProxy.Services
 
             try
             {
-                return JsonSerializer.Deserialize<T>(serializedData);
+                return JsonSerializer.Deserialize<T>(serializedData!);
             }
             catch (JsonException ex)
             {
@@ -49,7 +49,7 @@ namespace AIMaestroProxy.Services
 
             try
             {
-                return JsonSerializer.Deserialize<T>(serializedData);
+                return JsonSerializer.Deserialize<T>(serializedData!);
             }
             catch (JsonException ex)
             {

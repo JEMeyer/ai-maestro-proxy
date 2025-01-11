@@ -40,6 +40,9 @@ builder.Services.AddSingleton<DataService>();
 builder.Services.AddSingleton<GpuManagerService>();
 builder.Services.AddControllers();
 
+// Register WebSocketHandler as scoped
+builder.Services.AddScoped<WebSocketHandler>();
+
 // Add transient HttpClient service for proxied requests
 builder.Services.AddHttpClient<ProxiedRequestService>();
 
@@ -55,21 +58,23 @@ app.UseMiddleware<StopwatchMiddleware>();
 // Middleware to handle not found responses
 app.UseMiddleware<NotFoundLoggingMiddleware>();
 
+// Enable WebSockets
+app.UseWebSockets();
+
 // Define the default route
 app.MapControllerRoute(
     name: "default",
     pattern: "{*path}",
     defaults: new { controller = "Proxy", action = "HandleRequest" });
 
-// Enable WebSockets
-app.UseWebSockets();
-
+// Map WebSocket endpoint
 app.Map("/ws", async context =>
 {
     if (context.WebSockets.IsWebSocketRequest)
     {
         var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-        await WebSocketHandler.HandleWebSocketAsync(webSocket);
+        var webSocketHandler = context.RequestServices.GetRequiredService<WebSocketHandler>();
+        await webSocketHandler.HandleWebSocketAsync(webSocket);
     }
     else
     {

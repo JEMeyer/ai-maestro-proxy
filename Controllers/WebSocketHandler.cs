@@ -100,11 +100,17 @@ namespace AIMaestroProxy.Controllers
             }
         }
 
-        private async Task HandleReserveCommandAsync(WebSocket webSocket, string? modelName, PathCategories.OutputType outputType)
+        private async Task HandleReserveCommandAsync(WebSocket webSocket, string? modelName, PathCategories.OutputType? outputType)
         {
+            if (outputType == null)
+            {
+                await SendErrorAsync(webSocket, "Invalid output type.");
+                return;
+            }
+
             try
             {
-                var modelAssignment = await _gpuManagerService.GetAvailableModelAssignmentAsync(outputType, modelName, CancellationToken.None);
+                var modelAssignment = await _gpuManagerService.GetAvailableModelAssignmentAsync((PathCategories.OutputType)outputType, modelName, CancellationToken.None);
                 if (modelAssignment == null)
                 {
                     await SendErrorAsync(webSocket, "No suitable GPU available for the requested model.");
