@@ -4,13 +4,13 @@ using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
 using AIMaestroProxy.Models;
-using AIMaestroProxy.Services;
+using AIMaestroProxy.Interfaces;
 
 namespace AIMaestroProxy.Controllers
 {
-    public class WebSocketHandler(GpuManagerService gpuManagerService, ILogger<WebSocketHandler> logger)
+    public class WebSocketHandler(IGpuManagerService gpuManagerService, ILogger<WebSocketHandler> logger)
     {
-        private readonly GpuManagerService _gpuManagerService = gpuManagerService;
+        private readonly IGpuManagerService _gpuManagerService = gpuManagerService;
         private readonly ILogger<WebSocketHandler> _logger = logger;
 
         // Store GPU reservations associated with WebSocket connections

@@ -4,13 +4,14 @@ using AIMaestroProxy.Models;
 using System.Text;
 using System.Text.RegularExpressions;
 using static AIMaestroProxy.Models.PathCategories;
+using AIMaestroProxy.Interfaces;
 
 namespace AIMaestroProxy.Controllers
 {
     [ApiController]
     [Route("{*path}")] // Route all paths
     public partial class ProxyController(
-        GpuManagerService gpuManagerService,
+        IGpuManagerService gpuManagerService,
         DataService dataService,
         ProxiedRequestService proxiedRequestService,
         ILogger<ProxyController> logger
@@ -52,8 +53,9 @@ namespace AIMaestroProxy.Controllers
 
             try
             {
+                logger.LogInformation(path);
                 // Determine if the path requires GPU resources
-                if (GpuPaths.ComputeRequired.Contains(path))
+                if (GpuPaths.ComputeRequired.Any(path.StartsWith))
                 {
                     logger.LogDebug("GPU-bound request for path: {Path}", path);
 
@@ -134,19 +136,21 @@ namespace AIMaestroProxy.Controllers
             return new EmptyResult(); // The response is handled by RouteRequestAsync
         }
 
-        [GeneratedRegex("model\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase)]
+        [GeneratedRegex("model\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase)]
         private static partial Regex ModelRegex();
 
         /// <summary>
         /// Extracts the model name from the request body without fully buffering it.
         /// Assumes the model field appears early in the JSON body.
         /// </summary>
-        private static async Task<string?> ExtractModelNameAsync(Stream requestBody)
+        private async Task<string?> ExtractModelNameAsync(Stream requestBody)
         {
             // Set a limit to how much to read (e.g., first 16KB)
             int maxReadSize = 16 * 1024; // 16KB
             byte[] buffer = new byte[maxReadSize];
-            int bytesRead = await requestBody.ReadAsync(buffer, 0, maxReadSize);
+            Memory<byte> memoryBuffer = new(buffer);
+
+            int bytesRead = await requestBody.ReadAsync(memoryBuffer, CancellationToken.None);
 
             if (bytesRead == 0)
             {
@@ -154,6 +158,8 @@ namespace AIMaestroProxy.Controllers
             }
 
             string partialBody = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+            logger.LogInformation(partialBody);
 
             // extraction using Regex (adjust as needed)
             var match = ModelRegex().Match(partialBody);

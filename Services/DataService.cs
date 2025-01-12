@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AIMaestroProxy.Interfaces;
 using AIMaestroProxy.Models;
 using static AIMaestroProxy.Models.PathCategories;
 
@@ -65,21 +66,21 @@ namespace AIMaestroProxy.Services
         /// <summary>
         /// Generates a standardized cache key based on service and model names.
         /// </summary>
-        private static string GenerateCacheKey(OutputType OutputType, string? modelName)
+        private static string GenerateCacheKey(OutputType outputType, string? modelName)
         {
             return "model-assignments:" + (string.IsNullOrEmpty(modelName)
-                ? $"{OutputType.ToFriendlyString()}"
-                : $"{OutputType.ToFriendlyString()}:{modelName}");
+                ? $"{outputType.ToFriendlyString()}"
+                : $"{outputType.ToFriendlyString()}:{modelName}");
         }
 
-        public GpuLock? GetGpuLock(string gpuId)
+        public GpuStatus? GetGpuStatus(string gpuId)
         {
-            return _cacheService.GetCachedData<GpuLock>(CacheCategory.GpuLock, gpuId);
+            return _cacheService.GetCachedData<GpuStatus>(CacheCategory.GpuStatus, gpuId);
         }
 
-        public void SetGpuLock(string gpuId, GpuLock gpuLock)
+        public void SetGpuStatus(string gpuId, GpuStatus gpuLock)
         {
-            _cacheService.CacheData(CacheCategory.GpuLock, gpuId, gpuLock, TimeSpan.FromMinutes(10));
+            _cacheService.CacheData(CacheCategory.GpuStatus, gpuId, gpuLock, TimeSpan.FromMinutes(10));
         }
     }
 }

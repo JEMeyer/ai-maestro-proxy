@@ -12,7 +12,7 @@ namespace AIMaestroProxy.Middleware
 
             stopwatch.Stop();
 
-            logger.LogDebug("##COLOR##Total request time: {milliseconds} ms.", stopwatch.ElapsedMilliseconds);
+            logger.LogDebug("##COLOR## Total request time: {milliseconds} ms.", stopwatch.ElapsedMilliseconds);
         }
     }
 }

@@ -1,21 +1,12 @@
 using Dapper;
 using MySql.Data.MySqlClient;
 using AIMaestroProxy.Models;
-using AIMaestroProxy.Extensions;
 using static AIMaestroProxy.Models.PathCategories;
 
 namespace AIMaestroProxy.Services
 {
-    public class DatabaseService
+    public class DatabaseService(MySqlConnection dbConnection, ILogger<DatabaseService> logger)
     {
-        private readonly MySqlConnection _dbConnection;
-        private readonly ILogger<DatabaseService> _logger;
-
-        public DatabaseService(MySqlConnection dbConnection, ILogger<DatabaseService> logger)
-        {
-            _dbConnection = dbConnection;
-            _logger = logger;
-        }
 
         /// <summary>
         /// Retrieves model assignments filtered by model name.
@@ -42,18 +33,18 @@ namespace AIMaestroProxy.Services
                     AVG(g.weight) DESC;";
 
             var parameters = new { ModelName = modelName };
-            var modelAssignments = await _dbConnection.QueryAsync<ModelAssignment>(sql, parameters);
+            var modelAssignments = await dbConnection.QueryAsync<ModelAssignment>(sql, parameters);
 
-            _logger.LogDebug("Retrieved {Count} model assignments for model '{ModelName}' from database.", modelAssignments.Count(), modelName);
+            logger.LogDebug("Retrieved {Count} model assignments for model '{ModelName}' from database.", modelAssignments.Count(), modelName);
             return modelAssignments;
         }
 
         /// <summary>
         /// Retrieves model assignments filtered by service name.
         /// </summary>
-        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentByServiceAsync(OutputType OutputType)
+        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentByServiceAsync(OutputType outputType)
         {
-            var sql = @"
+            var sql = $@"
                 SELECT
                     a.name,
                     a.model_name AS modelName,
@@ -68,18 +59,16 @@ namespace AIMaestroProxy.Services
                 WHERE
                     a.model_name IN (
                         SELECT name
-                        FROM services
-                        WHERE service_name = @OutputType
+                        FROM {outputType.ToFriendlyString()}
                     )
                 GROUP BY
                     a.id,
                     a.port,
                     c.ip_addr;";
 
-            var parameters = new { OutputType = OutputType.ToFriendlyString() };
-            var modelAssignments = await _dbConnection.QueryAsync<ModelAssignment>(sql, parameters);
+            var modelAssignments = await dbConnection.QueryAsync<ModelAssignment>(sql);
 
-            _logger.LogDebug("Retrieved {Count} model assignments for service '{OutputType}' from database.", modelAssignments.Count(), OutputType);
+            logger.LogDebug("Retrieved {Count} model assignments for service '{OutputType}' from database.", modelAssignments.Count(), outputType);
             return modelAssignments;
         }
     }

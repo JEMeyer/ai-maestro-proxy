@@ -1,5 +1,6 @@
 using AIMaestroProxy.Controllers;
 using AIMaestroProxy.Extensions;
+using AIMaestroProxy.Health;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +16,9 @@ builder.Configuration
 // Register services
 builder.Services.AddServices(builder.Configuration);
 
+builder.Services.AddHealthChecks()
+    .AddCheck<GpuHealthCheck>("gpu_health");
+
 // Build the application
 var app = builder.Build();
 
@@ -23,6 +27,8 @@ app.UseLogging();
 app.UseWebSockets();
 
 // Map routes
+app.MapHealthChecks("/health");
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{*path}",
@@ -42,5 +48,4 @@ app.Map("/ws", async context =>
     }
 });
 
-// Run the application
 app.Run();

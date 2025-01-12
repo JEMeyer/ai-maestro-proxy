@@ -4,10 +4,11 @@ using AIMaestroProxy.Models;
 using StackExchange.Redis;
 using System.Collections.Concurrent;
 using static AIMaestroProxy.Models.PathCategories;
+using AIMaestroProxy.Interfaces;
 
 namespace AIMaestroProxy.Services
 {
-    public partial class GpuManagerService : IDisposable
+    public partial class GpuManagerService : IGpuManagerService
     {
         private readonly DatabaseService databaseService;
         private readonly DataService dataService;
@@ -56,17 +57,22 @@ namespace AIMaestroProxy.Services
                 logger.LogDebug("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
                 var unlocked = gpuIds.All(gpuId =>
                 {
-                    var gpuLock = dataService.GetGpuLock(gpuId);
-                    var isUnlocked = gpuLock == null || string.IsNullOrEmpty(gpuLock.ModelInUse);
-                    logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, isUnlocked ? "Unlocked" : "Locked");
-                    return isUnlocked;
+                    var gpuStatus = dataService.GetGpuStatus(gpuId);
+                    if (gpuStatus == null)
+                    {
+                        logger.LogWarning("{GpuIds}: No gpu status to read", string.Join(", ", gpuIds));
+                        return false;
+                    }
+
+                    logger.LogDebug("GPU {GpuId} lock status: {LockStatus}", gpuId, gpuStatus.IsLocked.ToString());
+                    return !gpuStatus.IsLocked;
                 });
                 if (unlocked)
                 {
                     logger.LogDebug("Locking : {GpuIds}", string.Join(", ", gpuIds));
                     foreach (var gpuId in gpuIds)
                     {
-                        dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = modelName });
+                        dataService.SetGpuStatus(gpuId, new GpuStatus { CurrentModel = modelName, GpuId = gpuId, IsLocked = true  });
                         _gpuLastActivity[gpuId] = DateTime.UtcNow;
                     }
                     var lockedGpus = gpuIds.ToDictionary(gpuId => gpuId, _ => modelName);
@@ -83,6 +89,13 @@ namespace AIMaestroProxy.Services
             }
         }
 
+        /*
+        public string GpuId { get; init; } = string.Empty;
+        public string? CurrentModel { get; init; }
+        public DateTime? LastActivity { get; init; }
+        public bool IsLocked => !string.IsNullOrEmpty(CurrentModel);
+        */
+
         public void UnlockGPUs(string[] gpuIds)
         {
             lock (lockObject)
@@ -90,7 +103,7 @@ namespace AIMaestroProxy.Services
                 logger.LogDebug("Unlocking GPUs : {GpuIds}", string.Join(", ", gpuIds));
                 foreach (var gpuId in gpuIds)
                 {
-                    dataService.SetGpuLock(gpuId, new GpuLock { ModelInUse = string.Empty });
+                    dataService.SetGpuStatus(gpuId, new GpuStatus { CurrentModel = string.Empty, LastActivity = DateTime.UtcNow, GpuId = gpuId });
                 }
                 var unlockedGpus = gpuIds.ToDictionary(gpuId => gpuId, gpuId => "");
                 var message = JsonSerializer.Serialize(unlockedGpus);
@@ -141,6 +154,48 @@ namespace AIMaestroProxy.Services
                 {
                     _gpuLastActivity[gpuId] = DateTime.UtcNow;
                 }
+            }
+        }
+
+        public async Task<bool> IsHealthyAsync()
+        {
+            try
+            {
+                // Check if Redis connection is healthy
+                var pingTimespan = subscriber.Ping();
+
+                // Check if we can access the database
+                var modelAssignments = await databaseService.GetModelAssignmentByServiceAsync(OutputType.Text);
+
+                // Consider the service healthy if we can reach both Redis and the database
+                return true;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Health check failed");
+                return false;
+            }
+        }
+
+        public IEnumerable<GpuStatus> GetCurrentGpuStatus()
+        {
+            lock (lockObject)
+            {
+                var statuses = new List<GpuStatus>();
+
+                // Convert the current GPU activity tracking into status objects
+                foreach (var activity in _gpuLastActivity)
+                {
+                    var gpuLock = dataService.GetGpuStatus(activity.Key);
+                    statuses.Add(new GpuStatus
+                    {
+                        GpuId = activity.Key,
+                        CurrentModel = gpuLock?.CurrentModel,
+                        LastActivity = activity.Value
+                    });
+                }
+
+                return statuses;
             }
         }
 

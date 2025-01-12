@@ -2,18 +2,11 @@
 ### GPU ENDPOINTS
 ###
 
-### Reserve a model
-POST {{proxyHost}}/gpus/reserve
+###
+### Healthcheck (redis + db
+GET {{proxyHost}}/health
 Content-Type: application/json
 
-{
-  "modelName": "codestral",
-  "outputType": "llms"
-}
-
-### Release a model
-POST {{proxyHost}}/gpus/release/2
-Content-Type: application/json
 
 ###
 ### DIFFUSION ENDPOINTS
@@ -21,11 +14,11 @@ Content-Type: application/json
 
 ###
 ### Generate an image with sdxl-turbo
-POST {{proxyHost}}/txt2img
+POST {{proxyHost}}/diffusion/txt2img
 Content-Type: application/json
 
 {
-  "model": "sdxl-turbo",
+  "model": "animagine-xl-3.1",
   "prompt": "A photo of a cat in a hat, digital art"
 }
 

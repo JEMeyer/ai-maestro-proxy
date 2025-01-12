@@ -4,16 +4,10 @@ using StackExchange.Redis;
 
 namespace AIMaestroProxy.Services
 {
-    public class CacheService
+    public class CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
     {
-        private readonly IConnectionMultiplexer _redis;
-        private readonly ILogger<CacheService> _logger;
-
-        public CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
-        {
-            _redis = redis;
-            _logger = logger;
-        }
+        private readonly IConnectionMultiplexer _redis = redis;
+        private readonly ILogger<CacheService> _logger = logger;
 
         public async Task<T?> GetCachedDataAsync<T>(CacheCategory category, string key)
         {

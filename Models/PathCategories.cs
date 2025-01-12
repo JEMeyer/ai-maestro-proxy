@@ -29,18 +29,24 @@ namespace AIMaestroProxy.Models
 
         public static OutputType GetOutputTypeFromString(string sType)
         {
-            switch (sType)
+            return sType switch
             {
-                case "textstring":
-                    return OutputType.Text;
-                case "speechstring":
-                    return OutputType.Speech;
-                case "imagesstring":
-                    return OutputType.Images;
-                default:
-                    return OutputType.Unknown;
-            }
+                "textstring" => OutputType.Text,
+                "speechstring" => OutputType.Speech,
+                "imagesstring" => OutputType.Images,
+                _ => OutputType.Unknown,
+            };
         }
 
+        public static string ToFriendlyString(this OutputType OutputType)
+        {
+            return OutputType switch
+            {
+                OutputType.Images => "images",
+                OutputType.Speech => "speech",
+                OutputType.Text => "llms",
+                _ => throw new ArgumentException("Invalid path family.")
+            };
+        }
     }
 }
