@@ -1,5 +1,5 @@
 
-namespace AIMaestroProxy.Attributes
+namespace AIMaestroProxy.Models
 {
   public static class GpuPaths
   {

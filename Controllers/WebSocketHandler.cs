@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Collections.Concurrent;
 using AIMaestroProxy.Models;
 using AIMaestroProxy.Services;
-using Microsoft.AspNetCore.Mvc.Formatters;
 
 namespace AIMaestroProxy.Controllers
 {

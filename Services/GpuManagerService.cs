@@ -25,14 +25,14 @@ namespace AIMaestroProxy.Services
             this.databaseService = databaseService;
             this.dataService = dataService;
             this.logger = logger;
-            this.subscriber = redis.GetSubscriber();
+            subscriber = redis.GetSubscriber();
 
             // Start a timer that checks every 30 seconds
             _timer = new Timer(_ => ReleaseStuckGPUs(), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
         }
 
         /// <summary>
-        /// Runs every 30 seconds to release any GPUs that are stuck - if inactive for more than 1 min will be released
+        /// When ran, will release any GPUs that are stuck (inactive for more than 1 min)
         /// </summary>
         private void ReleaseStuckGPUs()
         {

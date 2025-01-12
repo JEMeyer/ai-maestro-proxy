@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using AIMaestroProxy.Attributes;
 using AIMaestroProxy.Services;
 using AIMaestroProxy.Models;
 using System.Text;
@@ -95,18 +94,14 @@ namespace AIMaestroProxy.Controllers
                     };
                 }
 
+                string? body = null;
+                if (HttpContext.Request.Method == HttpMethod.Post.Method)
+                {
+                    body = await proxiedRequestService.ModifyRequestBodyAsync(HttpContext.Request.Body);
+                }
+
                 // Route the request to the proxied service
-                if (modelAssignment != null)
-                {
-                    await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, null);
-                }
-                else
-                {
-                    // Handle non-GPU-bound requests if applicable
-                    // For example, list models, version info, etc.
-                    // You might need to implement separate logic here
-                    return NotFound("Path handling not implemented.");
-                }
+                await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, body);
             }
             catch (OperationCanceledException oce)
             {

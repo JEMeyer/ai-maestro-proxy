@@ -1,4 +1,3 @@
-// Models/WebSocketMessage.cs
 using System.Text.Json.Serialization;
 
 namespace AIMaestroProxy.Models

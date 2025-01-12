@@ -1,5 +1,5 @@
 using System.Text.Json;
-using AIMaestroProxy.Attributes;
+using AIMaestroProxy.Models;
 using StackExchange.Redis;
 
 namespace AIMaestroProxy.Services

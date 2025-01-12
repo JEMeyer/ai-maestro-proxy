@@ -1,6 +1,7 @@
 using Dapper;
 using MySql.Data.MySqlClient;
 using AIMaestroProxy.Models;
+using AIMaestroProxy.Extensions;
 using static AIMaestroProxy.Models.PathCategories;
 
 namespace AIMaestroProxy.Services

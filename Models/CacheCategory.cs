@@ -1,4 +1,4 @@
-namespace AIMaestroProxy.Attributes
+namespace AIMaestroProxy.Models
 {
     public enum CacheCategory
     {

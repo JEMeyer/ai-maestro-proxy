@@ -1,73 +1,33 @@
 using AIMaestroProxy.Controllers;
-using AIMaestroProxy.Logging;
-using AIMaestroProxy.Middleware;
-using AIMaestroProxy.Services;
-using Microsoft.Extensions.Logging.Console;
-using MySql.Data.MySqlClient;
-using StackExchange.Redis;
+using AIMaestroProxy.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
 Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
 
-// Load Config values
+// Load configuration
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
 
-// Configure services
-builder.Services.AddLogging(loggingBuilder =>
-{
-    loggingBuilder.ClearProviders();
-    loggingBuilder.AddConfiguration(builder.Configuration.GetSection("Logging"));
-    loggingBuilder.AddConsole(options => options.FormatterName = "custom");
-    loggingBuilder.AddConsoleFormatter<CustomConsoleFormatter, ConsoleFormatterOptions>();
-});
+// Register services
+builder.Services.AddServices(builder.Configuration);
 
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
-ArgumentException.ThrowIfNullOrWhiteSpace(redisConnectionString);
-
-// Add Singleton services for the database/redis clients
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
-builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
-
-// Add Singleton services for Services
-builder.Services.AddSingleton<CacheService>();
-builder.Services.AddSingleton<DatabaseService>();
-builder.Services.AddSingleton<DataService>();
-builder.Services.AddSingleton<GpuManagerService>();
-builder.Services.AddControllers();
-
-// Register WebSocketHandler as scoped
-builder.Services.AddScoped<WebSocketHandler>();
-
-// Add transient HttpClient service for proxied requests
-builder.Services.AddHttpClient<ProxiedRequestService>();
-
+// Build the application
 var app = builder.Build();
 
-// Middleware to handle errors globally
-app.UseMiddleware<ErrorHandlingMiddleware>();
-
-// Middleware to log request trace ID and handle stopwatch
-app.UseMiddleware<TraceIdLoggingMiddleware>();
-app.UseMiddleware<StopwatchMiddleware>();
-
-// Middleware to handle not found responses
-app.UseMiddleware<NotFoundLoggingMiddleware>();
-
-// Enable WebSockets
+// Use logging and other middlewares
+app.UseLogging();
 app.UseWebSockets();
 
-// Define the default route
+// Map routes
 app.MapControllerRoute(
     name: "default",
     pattern: "{*path}",
     defaults: new { controller = "Proxy", action = "HandleRequest" });
 
-// Map WebSocket endpoint
 app.Map("/ws", async context =>
 {
     if (context.WebSockets.IsWebSocketRequest)
@@ -82,4 +42,5 @@ app.Map("/ws", async context =>
     }
 });
 
+// Run the application
 app.Run();

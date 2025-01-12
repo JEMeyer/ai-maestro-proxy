@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AIMaestroProxy.Models;
@@ -30,6 +31,7 @@ namespace AIMaestroProxy.Services
             if (method != HttpMethod.Get && method != HttpMethod.Head && !string.IsNullOrEmpty(body))
             {
                 httpRequest.Content = new StringContent(body, Encoding.UTF8, "application/json");
+                httpRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(context.Request.ContentType ?? "application/json");
             }
 
             // Copy request headers, excluding hop-by-hop headers
@@ -116,6 +118,23 @@ namespace AIMaestroProxy.Services
             };
 
             return hopByHopHeaders.Contains(headerKey);
+        }
+
+        public async Task<string?> ModifyRequestBodyAsync(Stream requestBody)
+        {
+            using var reader = new StreamReader(requestBody);
+            var bodyJson = await reader.ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(bodyJson)) return null;
+
+            var bodyObj = JsonSerializer.Deserialize<Dictionary<string, object>>(bodyJson);
+            if (bodyObj == null)
+            {
+                logger.LogError("Failed to deserialize JSON: {BodyJson}", bodyJson);
+                return null;
+            }
+
+            bodyObj["keepAlive"] = -1;
+            return JsonSerializer.Serialize(bodyObj);
         }
     }
 }
