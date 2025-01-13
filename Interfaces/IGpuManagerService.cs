@@ -21,6 +21,12 @@ namespace AIMaestroProxy.Interfaces
         void RefreshGpuActivity(string[] gpuIds);
 
         /// <summary>
+        /// Function to auto-refresh gpus every 20 sec (every 30 cleanup happens). This is meant to only
+        /// be used by the proxy as the websocket approach has it's own ping/pong to manage this.
+        /// </summary>
+        Task KeepGpuRefreshAliveAsync(string[] gpuIds, CancellationToken cancelToken);
+
+        /// <summary>
         /// Checks if the GPU management service is functioning correctly
         /// </summary>
         bool IsHealthy();

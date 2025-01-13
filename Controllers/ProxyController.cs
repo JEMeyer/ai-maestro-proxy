@@ -144,8 +144,37 @@ namespace AIMaestroProxy.Controllers
                     };
                 }
 
-                // Route the request to the proxied service with the body we saved
-                await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, bodyContent);
+                // If we do have GPU IDs, start a keep-alive loop
+                CancellationTokenSource? refreshCts = null;
+                Task? refreshTask = null;
+
+                if (!string.IsNullOrEmpty(modelAssignment.GpuIds))
+                {
+                    refreshCts = new CancellationTokenSource();
+                    refreshTask = gpuManagerService.KeepGpuRefreshAliveAsync(modelAssignment.GpuIds.Split(","), refreshCts.Token);
+                }
+
+                try
+                {
+                    // Route the actual request to the proxied service
+                    await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, bodyContent);
+                }
+                finally
+                {
+                    // Stop refreshing once this request is done
+                    if (refreshCts != null)
+                    {
+                        refreshCts.Cancel();
+                        try
+                        {
+                            await (refreshTask ?? Task.CompletedTask);
+                        }
+                        catch (TaskCanceledException)
+                        {
+                            // normal upon cancellation
+                        }
+                    }
+                }
             }
             catch (OperationCanceledException oce)
             {
@@ -168,14 +197,16 @@ namespace AIMaestroProxy.Controllers
             finally
             {
                 // Ensure GPU resources are released
-                if (modelAssignment != null)
+                if (modelAssignment != null && !string.IsNullOrEmpty(modelAssignment.GpuIds))
                 {
-                    gpuManagerService.UnlockGPUs(modelAssignment.GpuIds.Split(',', StringSplitOptions.RemoveEmptyEntries));
-                    logger.LogDebug("Unlocked GPUs for model: {ModelAssignment}", modelName);
+                    gpuManagerService.UnlockGPUs(modelAssignment.GpuIds
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    logger.LogDebug("Unlocked GPUs for model: {ModelName}", modelName);
                 }
             }
 
-            return new EmptyResult(); // The response is handled by RouteRequestAsync
+            // The response is already handled by RouteRequestAsync
+            return new EmptyResult();
         }
     }
 }

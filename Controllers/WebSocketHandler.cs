@@ -80,7 +80,9 @@ namespace AIMaestroProxy.Controllers
                         break;
 
                     case "pong":
+                        ArgumentNullException.ThrowIfNull(webSocketMessage.GpuIds);
                         _heartbeatTracker[webSocket] = true;
+                        _gpuManagerService.RefreshGpuActivity(webSocketMessage.GpuIds);
                         _logger.LogInformation("Received pong from client.");
                         break;
 

@@ -6,7 +6,7 @@ namespace AIMaestroProxy.Models
     public class WebSocketMessage
     {
         [JsonPropertyName("command")]
-        public required string Command { get; set; } // e.g., "reserve", "release"
+        public required string Command { get; set; } // e.g., "reserve", "release", "ping"
 
         [JsonPropertyName("modelName")]
         public string? ModelName { get; set; } // Used with "reserve"
@@ -15,7 +15,7 @@ namespace AIMaestroProxy.Models
         public OutputType? OutputType { get; set; } // Used with "reserve"
 
         [JsonPropertyName("gpuIds")]
-        public string[]? GpuIds { get; set; } // Used with "release"
+        public string[]? GpuIds { get; set; } // Used with "release" and "ping"
     }
 
     public class WebSocketResponse

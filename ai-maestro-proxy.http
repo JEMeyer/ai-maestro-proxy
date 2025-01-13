@@ -4,7 +4,7 @@
 
 ###
 ### Healthcheck (redis + db
-GET {{proxyHost}}/health
+GET {{proxyHost}}/
 Content-Type: application/json
 
 

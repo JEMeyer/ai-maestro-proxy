@@ -137,6 +137,31 @@ namespace AIMaestroProxy.Services
             }
         }
 
+        public async Task KeepGpuRefreshAliveAsync(string[] gpuIds, CancellationToken cancelToken)
+        {
+            try
+            {
+                // Keep looping until the request is finished or canceled
+                while (!cancelToken.IsCancellationRequested)
+                {
+                    // Call the "one call" RefreshGpuActivity method
+                    this.RefreshGpuActivity(gpuIds);
+
+                    // Wait for 20 seconds before calling it again
+                    await Task.Delay(TimeSpan.FromSeconds(20), cancelToken);
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                // Normal on cancellation
+            }
+            catch (Exception ex)
+            {
+                // Log errors so they aren’t swallowed
+                logger.LogError(ex, "Error in KeepGpuRefreshAliveAsync for {GpuIds}", gpuIds);
+            }
+        }
+
         public async Task<ModelAssignment?> GetAvailableModelAssignmentAsync(OutputType outputType, string modelName, CancellationToken cancellationToken)
         {
             var modelAssignments = await dataService.GetModelAssignmentsAsync(outputType, modelName);
