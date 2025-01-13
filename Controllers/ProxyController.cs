@@ -17,6 +17,10 @@ namespace AIMaestroProxy.Controllers
         ILogger<ProxyController> logger
     ) : ControllerBase
     {
+        [GeneratedRegex("model\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase)]
+        private static partial Regex ModelRegex();
+
+
         [HttpGet]
         public async Task<IActionResult> Get([FromRoute] string? path)
         {
@@ -91,6 +95,11 @@ namespace AIMaestroProxy.Controllers
                         {
                             logger.LogError("Model name not found in the request body.");
                             return BadRequest("Model name is required.");
+                        }
+                        else if (modelName.EndsWith(":latest", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Remove ":latest" from the end of the model name - maestrodb doesn't use it
+                            modelName = modelName[..^7];
                         }
                     }
                 }
@@ -167,41 +176,6 @@ namespace AIMaestroProxy.Controllers
             }
 
             return new EmptyResult(); // The response is handled by RouteRequestAsync
-        }
-
-        [GeneratedRegex("model\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase)]
-        private static partial Regex ModelRegex();
-
-        /// <summary>
-        /// Extracts the model name from the request body without fully buffering it.
-        /// Assumes the model field appears early in the JSON body.
-        /// </summary>
-        private async Task<string?> ExtractModelNameAsync(Stream requestBody)
-        {
-            // Set a limit to how much to read (e.g., first 16KB)
-            int maxReadSize = 16 * 1024; // 16KB
-            byte[] buffer = new byte[maxReadSize];
-            Memory<byte> memoryBuffer = new(buffer);
-
-            int bytesRead = await requestBody.ReadAsync(memoryBuffer, CancellationToken.None);
-
-            if (bytesRead == 0)
-            {
-                return null;
-            }
-
-            string partialBody = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-            logger.LogInformation(partialBody);
-
-            // extraction using Regex (adjust as needed)
-            var match = ModelRegex().Match(partialBody);
-            if (match.Success && match.Groups.Count > 1)
-            {
-                return match.Groups[1].Value;
-            }
-
-            return null;
         }
     }
 }

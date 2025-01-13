@@ -128,7 +128,6 @@ namespace AIMaestroProxy.Services
                 {
                     try
                     {
-                        _logger.LogInformation("values[i] " + values[i]);
                         var status = JsonSerializer.Deserialize<GpuStatus>(values[i]!);
                         if (status != null)
                         {
