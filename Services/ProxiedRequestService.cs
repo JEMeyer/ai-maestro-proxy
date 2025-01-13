@@ -123,6 +123,7 @@ namespace AIMaestroProxy.Services
         {
             using var reader = new StreamReader(requestBody);
             var bodyJson = await reader.ReadToEndAsync();
+            logger.LogInformation($"body json was '{bodyJson}'");
             if (string.IsNullOrWhiteSpace(bodyJson)) return null;
 
             var bodyObj = JsonSerializer.Deserialize<Dictionary<string, object>>(bodyJson);

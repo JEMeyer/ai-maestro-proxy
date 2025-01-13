@@ -26,7 +26,7 @@ namespace AIMaestroProxy.Controllers
             _heartbeatTracker[webSocket] = true;
 
             var receiveBuffer = new byte[1024 * 4];
-            var keepAliveTask = KeepAliveAsync(webSocket);
+            _ = KeepAliveAsync(webSocket);
 
             try
             {
@@ -70,7 +70,9 @@ namespace AIMaestroProxy.Controllers
                 switch (webSocketMessage.Command.ToLower())
                 {
                     case "reserve":
-                        await HandleReserveCommandAsync(webSocket, webSocketMessage.ModelName, PathCategories.GetOutputTypeFromString(webSocketMessage.OutputType ?? ""));
+                        ArgumentException.ThrowIfNullOrEmpty(webSocketMessage.ModelName);
+                        ArgumentNullException.ThrowIfNull(webSocketMessage.OutputType);
+                        await HandleReserveCommandAsync(webSocket, webSocketMessage.ModelName, (PathCategories.OutputType)webSocketMessage.OutputType);
                         break;
 
                     case "release":
@@ -78,7 +80,6 @@ namespace AIMaestroProxy.Controllers
                         break;
 
                     case "pong":
-                        // Handle Pong response
                         _heartbeatTracker[webSocket] = true;
                         _logger.LogInformation("Received pong from client.");
                         break;
@@ -99,14 +100,8 @@ namespace AIMaestroProxy.Controllers
             }
         }
 
-        private async Task HandleReserveCommandAsync(WebSocket webSocket, string? modelName, PathCategories.OutputType? outputType)
+        private async Task HandleReserveCommandAsync(WebSocket webSocket, string modelName, PathCategories.OutputType outputType)
         {
-            if (outputType == null)
-            {
-                await SendErrorAsync(webSocket, "Invalid output type.");
-                return;
-            }
-
             try
             {
                 var modelAssignment = await _gpuManagerService.GetAvailableModelAssignmentAsync((PathCategories.OutputType)outputType, modelName, CancellationToken.None);
@@ -121,7 +116,7 @@ namespace AIMaestroProxy.Controllers
 
                 // Add the GPU reservation
                 _gpuReservations.AddOrUpdate(webSocket,
-                    new List<string>(gpuIds),
+                    [.. gpuIds],
                     (key, existingList) =>
                     {
                         existingList.AddRange(gpuIds);
@@ -177,7 +172,7 @@ namespace AIMaestroProxy.Controllers
             }
         }
 
-        private async Task SendResponseAsync(WebSocket webSocket, WebSocketResponse response)
+        private static async Task SendResponseAsync(WebSocket webSocket, WebSocketResponse response)
         {
             var responseJson = JsonSerializer.Serialize(response);
             var responseBytes = Encoding.UTF8.GetBytes(responseJson);
@@ -186,7 +181,7 @@ namespace AIMaestroProxy.Controllers
             await webSocket.SendAsync(buffer, WebSocketMessageType.Text, true, CancellationToken.None);
         }
 
-        private async Task SendErrorAsync(WebSocket webSocket, string errorMessage)
+        private static async Task SendErrorAsync(WebSocket webSocket, string errorMessage)
         {
             var response = new WebSocketResponse
             {

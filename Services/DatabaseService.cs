@@ -42,7 +42,7 @@ namespace AIMaestroProxy.Services
         /// <summary>
         /// Retrieves model assignments filtered by service name.
         /// </summary>
-        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentByServiceAsync(OutputType outputType)
+        public async Task<IEnumerable<ModelAssignment>> GetModelAssignmentByOutputTypeAsync(OutputType outputType)
         {
             var sql = $@"
                 SELECT
@@ -59,7 +59,7 @@ namespace AIMaestroProxy.Services
                 WHERE
                     a.model_name IN (
                         SELECT name
-                        FROM {outputType.ToFriendlyString()}
+                        FROM {outputType.ToStorageName()}
                     )
                 GROUP BY
                     a.id,

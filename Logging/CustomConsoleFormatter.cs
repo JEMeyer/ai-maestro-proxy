@@ -29,24 +29,30 @@ namespace AIMaestroProxy.Logging
             var traceIdentifier = "N/A";
             var requestPath = "N/A";
 
+            // Modified scope handling
+            var scopeValues = new Dictionary<string, string>();
             scopeProvider?.ForEachScope((scope, state) =>
+            {
+                if (scope is IEnumerable<KeyValuePair<string, object>> dictionary)
                 {
-                    if (scope is IEnumerable<KeyValuePair<string, object>> dictionary)
+                    foreach (var item in dictionary)
                     {
-                        foreach (var item in dictionary)
-                        {
-                            if (item.Key == "TraceIdentifier")
-                            {
-                                traceIdentifier = item.Value?.ToString() ?? "N/A";
-                            }
-                            else if (item.Key == "RequestPath")
-                            {
-                                requestPath = item.Value?.ToString() ?? "N/A";
-                            }
-                        }
+                        // Always update with the latest value
+                        scopeValues[item.Key] = item.Value?.ToString() ?? "N/A";
                     }
-                }, logEntry);
+                }
+            }, logEntry);
 
+            // Get the final values after processing all scopes
+            if (scopeValues.TryGetValue("TraceIdentifier", out var trace))
+            {
+                traceIdentifier = trace;
+            }
+            if (scopeValues.TryGetValue("RequestPath", out var path))
+            {
+                requestPath = path;
+            }
+            
             if (traceIdentifier == "N/A" && requestPath == "N/A")
             {
                 textWriter.Write(traceIdentifierColor);

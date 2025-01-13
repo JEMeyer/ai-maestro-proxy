@@ -14,12 +14,13 @@ Content-Type: application/json
 
 ###
 ### Generate an image with sdxl-turbo
-POST {{proxyHost}}/diffusion/txt2img
+POST {{proxyHost}}/txt2img
 Content-Type: application/json
 
 {
   "model": "animagine-xl-3.1",
-  "prompt": "A photo of a cat in a hat, digital art"
+  "prompt": "A photo of a cat in a hat, digital art",
+  "num_inference_steps": 10
 }
 
 ### Generate an image with sd-turbo

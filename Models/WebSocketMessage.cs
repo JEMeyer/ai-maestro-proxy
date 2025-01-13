@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using static AIMaestroProxy.Models.PathCategories;
 
 namespace AIMaestroProxy.Models
 {
@@ -11,7 +12,7 @@ namespace AIMaestroProxy.Models
         public string? ModelName { get; set; } // Used with "reserve"
 
         [JsonPropertyName("outputType")]
-        public string? OutputType { get; set; } // Used with "reserve"
+        public OutputType? OutputType { get; set; } // Used with "reserve"
 
         [JsonPropertyName("gpuIds")]
         public string[]? GpuIds { get; set; } // Used with "release"

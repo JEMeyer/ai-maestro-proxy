@@ -27,13 +27,6 @@ app.UseLogging();
 app.UseWebSockets();
 
 // Map routes
-app.MapHealthChecks("/health");
-
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{*path}",
-    defaults: new { controller = "Proxy", action = "HandleRequest" });
-
 app.Map("/ws", async context =>
 {
     if (context.WebSockets.IsWebSocketRequest)
@@ -47,5 +40,7 @@ app.Map("/ws", async context =>
         context.Response.StatusCode = 400;
     }
 });
+app.MapHealthChecks("/health");
+app.MapControllers();
 
 app.Run();

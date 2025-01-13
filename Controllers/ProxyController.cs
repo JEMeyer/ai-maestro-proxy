@@ -41,6 +41,24 @@ namespace AIMaestroProxy.Controllers
             return await HandleRequest(HttpMethod.Delete, path ?? string.Empty);
         }
 
+        // In ProxyController.cs
+
+        [HttpDelete("/cache")]
+        public IActionResult ClearCache()
+        {
+            try
+            {
+                var removedCount = dataService.ClearCache();
+                logger.LogInformation("Cleared {Count} GPU status entries from cache", removedCount);
+                return Ok(new { removed = removedCount });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error clearing GPU status cache");
+                return StatusCode(500, "Failed to clear cache");
+            }
+        }
+
         // Centralized request handling
         [NonAction]
         private async Task<IActionResult> HandleRequest(HttpMethod method, string path)
@@ -49,21 +67,43 @@ namespace AIMaestroProxy.Controllers
 
             // Initialize variables
             ModelAssignment? modelAssignment = null;
-            string? modelName;
+            string? modelName = null;
+            string? bodyContent = null;
 
             try
             {
-                logger.LogInformation(path);
+                // If it's a POST request, read the body content first
+                if (HttpContext.Request.Method == HttpMethod.Post.Method)
+                {
+                    using var reader = new StreamReader(HttpContext.Request.Body);
+                    bodyContent = await reader.ReadToEndAsync();
+
+                    // If this path requires GPU, extract model name from the body we just read
+                    if (GpuPaths.ComputeRequired.Contains(path))
+                    {
+                        var match = ModelRegex().Match(bodyContent);
+                        if (match.Success && match.Groups.Count > 1)
+                        {
+                            modelName = match.Groups[1].Value;
+                        }
+
+                        if (string.IsNullOrEmpty(modelName))
+                        {
+                            logger.LogError("Model name not found in the request body.");
+                            return BadRequest("Model name is required.");
+                        }
+                    }
+                }
+
                 // Determine if the path requires GPU resources
-                if (GpuPaths.ComputeRequired.Any(path.StartsWith))
+                if (GpuPaths.ComputeRequired.Contains(path))
                 {
                     logger.LogDebug("GPU-bound request for path: {Path}", path);
 
-                    // Extract the model name from the request body without fully buffering
-                    modelName = await ExtractModelNameAsync(HttpContext.Request.Body);
+                    // We already have modelName from the body if this was a POST
                     if (string.IsNullOrEmpty(modelName))
                     {
-                        logger.LogError("Model name not found in the request body.");
+                        logger.LogError("Model name not found in the request.");
                         return BadRequest("Model name is required.");
                     }
 
@@ -89,21 +129,14 @@ namespace AIMaestroProxy.Controllers
                     modelAssignment = new ModelAssignment
                     {
                         Name = selectedContainer.Name,
-                        ModelName = string.Empty,
                         Ip = selectedContainer.Ip,
                         Port = selectedContainer.Port,
                         GpuIds = string.Empty,
                     };
                 }
 
-                string? body = null;
-                if (HttpContext.Request.Method == HttpMethod.Post.Method)
-                {
-                    body = await proxiedRequestService.ModifyRequestBodyAsync(HttpContext.Request.Body);
-                }
-
-                // Route the request to the proxied service
-                await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, body);
+                // Route the request to the proxied service with the body we saved
+                await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, bodyContent);
             }
             catch (OperationCanceledException oce)
             {
@@ -129,7 +162,7 @@ namespace AIMaestroProxy.Controllers
                 if (modelAssignment != null)
                 {
                     gpuManagerService.UnlockGPUs(modelAssignment.GpuIds.Split(',', StringSplitOptions.RemoveEmptyEntries));
-                    logger.LogDebug("Unlocked GPUs for model: {ModelAssignment}", modelAssignment.ModelName);
+                    logger.LogDebug("Unlocked GPUs for model: {ModelAssignment}", modelName);
                 }
             }
 

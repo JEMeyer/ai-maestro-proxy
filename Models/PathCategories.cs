@@ -22,7 +22,7 @@ namespace AIMaestroProxy.Models
         {
             if (path == "" || path.StartsWith("api/")) return OutputType.Text;
             if (path.StartsWith("audio/")) return OutputType.Speech;
-            if (path.StartsWith("diffusion/")) return OutputType.Images;
+            if (path.StartsWith("txt2img") || path.StartsWith("img2img")) return OutputType.Images;
 
             return OutputType.Unknown;
         }
@@ -31,19 +31,25 @@ namespace AIMaestroProxy.Models
         {
             return sType switch
             {
-                "textstring" => OutputType.Text,
-                "speechstring" => OutputType.Speech,
-                "imagesstring" => OutputType.Images,
+                "text" => OutputType.Text,
+                "speech" => OutputType.Speech,
+                "images" => OutputType.Images,
                 _ => OutputType.Unknown,
             };
         }
 
-        public static string ToFriendlyString(this OutputType OutputType)
+        /// <summary>
+        /// Used to get nice looking strings to use for redis key and db
+        /// </summary>
+        /// <param name="OutputType"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        public static string ToStorageName(this OutputType OutputType)
         {
             return OutputType switch
             {
-                OutputType.Images => "images",
-                OutputType.Speech => "speech",
+                OutputType.Images => "diffusors",
+                OutputType.Speech => "speech_models",
                 OutputType.Text => "llms",
                 _ => throw new ArgumentException("Invalid path family.")
             };
