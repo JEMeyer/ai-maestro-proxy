@@ -20,9 +20,19 @@ namespace AIMaestroProxy.Models
         /// <returns></returns>
         public static OutputType GetOutputTypeFromPath(string path)
         {
-            if (path == "" || path.StartsWith("api/")) return OutputType.Text;
+            if (
+                path == "" ||
+                path.StartsWith("api/") ||
+                path.StartsWith("v1/models"))
+                return OutputType.Text;
+
             if (path.StartsWith("audio/")) return OutputType.Speech;
-            if (path.StartsWith("txt2img") || path.StartsWith("img2img")) return OutputType.Images;
+
+            if (
+                path.StartsWith("txt2img") ||
+                path.StartsWith("img2img") ||
+                path.StartsWith("v1/images"))
+                return OutputType.Images;
 
             return OutputType.Unknown;
         }

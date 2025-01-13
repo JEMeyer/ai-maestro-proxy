@@ -4,11 +4,12 @@ namespace AIMaestroProxy.Models
   public static class GpuPaths
   {
     public static readonly string[] ComputeRequired = [
-        "api/generate",
-        "api/chat",
-        "api/embeddings",
-        "txt2img",
-        "img2img",
+        "api/generate", // ollama
+        "api/chat", // ollama
+        "api/embeddings", // ollama
+        "txt2img", // diffusors-api
+        "img2img", // diffuros-api
+        "v1/images" // open-ai like (diffusors-api)
         ];
   }
 }

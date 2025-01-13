@@ -45,24 +45,6 @@ namespace AIMaestroProxy.Controllers
             return await HandleRequest(HttpMethod.Delete, path ?? string.Empty);
         }
 
-        // In ProxyController.cs
-
-        [HttpDelete("/cache")]
-        public IActionResult ClearCache()
-        {
-            try
-            {
-                var removedCount = dataService.ClearCache();
-                logger.LogInformation("Cleared {Count} GPU status entries from cache", removedCount);
-                return Ok(new { removed = removedCount });
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error clearing GPU status cache");
-                return StatusCode(500, "Failed to clear cache");
-            }
-        }
-
         // Centralized request handling
         [NonAction]
         private async Task<IActionResult> HandleRequest(HttpMethod method, string path)

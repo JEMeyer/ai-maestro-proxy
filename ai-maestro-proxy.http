@@ -2,6 +2,49 @@
 ### GPU ENDPOINTS
 ###
 
+POST {{proxyHost}}/gpu/reserve
+Content-Type: application/json
+
+{
+  "outputType": "text",
+  "model": "qwq"
+}
+###
+
+POST {{proxyHost}}/gpu/reserve
+Content-Type: application/json
+
+{
+  "outputType": "images",
+  "model": "animagine-xl-3.1",
+}
+###
+
+POST {{proxyHost}}/gpu/ping
+Content-Type: application/json
+
+{
+  "gpuIds": ["1"]
+}
+
+###
+
+POST {{proxyHost}}/gpu/release
+Content-Type: application/json
+
+{
+  "gpuIds": ["1"]
+}
+###
+
+
+POST {{proxyHost}}/gpu/ping/
+Content-Type: application/json
+
+{
+  "gpuIds": ["1"]
+}
+
 ###
 ### Healthcheck (redis + db
 GET {{proxyHost}}/
@@ -111,7 +154,7 @@ POST {{proxyHost}}/api/show
 Content-Type: application/json
 
 {
-  "name": "codestral"
+  "name": "phi-3"
 }
 
 ###

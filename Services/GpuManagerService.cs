@@ -1,61 +1,25 @@
 using System.Text.Json;
 using AIMaestroProxy.Models;
 using StackExchange.Redis;
-using System.Collections.Concurrent;
 using static AIMaestroProxy.Models.PathCategories;
 using AIMaestroProxy.Interfaces;
 
 namespace AIMaestroProxy.Services
 {
-    public partial class GpuManagerService : IGpuManagerService
+    public partial class GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger) : IGpuManagerService
     {
-        private readonly DataService dataService;
-        private readonly ILogger<GpuManagerService> logger;
-        private readonly ISubscriber subscriber;
-        private readonly object lockObject = new();
+        private readonly DataService dataService = dataService;
+        private readonly ILogger<GpuManagerService> logger = logger;
+        private readonly ISubscriber subscriber = redis.GetSubscriber();
+        public object GpuLockObject { get; } = new();
         private readonly ManualResetEventSlim gpusFreedEvent = new(false);
         private static readonly RedisChannel GpuLockChangesChannel = RedisChannel.Literal("gpu-lock-changes");
-        private readonly ConcurrentDictionary<string, DateTime> _gpuLastActivity = new();
-        private readonly TimeSpan _timeout = TimeSpan.FromMinutes(1);
-        private readonly Timer? _timer;
-
-        public GpuManagerService(DataService dataService, IConnectionMultiplexer redis, ILogger<GpuManagerService> logger)
-        {
-            this.dataService = dataService;
-            this.logger = logger;
-            subscriber = redis.GetSubscriber();
-
-            // Start a timer that checks every 30 seconds
-            _timer = new Timer(_ => ReleaseStuckGPUs(), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
-        }
-
-        /// <summary>
-        /// When ran, will release any GPUs that are stuck (inactive for more than 1 min)
-        /// </summary>
-        private void ReleaseStuckGPUs()
-        {
-            lock (lockObject)
-            {
-                var currentTime = DateTime.UtcNow;
-                var allGpuStatuses = dataService.GetAllGpuStatuses();
-
-                foreach (var status in allGpuStatuses)
-                {
-                    if (status.LastActivity.HasValue &&
-                        currentTime - status.LastActivity.Value > _timeout &&
-                        status.IsLocked)
-                    {
-                        UnlockGPUs([status.GpuId]);
-                    }
-                }
-            }
-        }
 
         private bool TryLockGPUs(string[] gpuIds, string modelName)
         {
             try
             {
-                logger.LogDebug("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
+                logger.LogTrace("Checking/Locking : {GpuIds}", string.Join(", ", gpuIds));
                 var allUnlocked = gpuIds.All(gpuId =>
                 {
                     var gpuStatus = dataService.GetGpuStatus(gpuId);
@@ -99,7 +63,7 @@ namespace AIMaestroProxy.Services
 
         public void UnlockGPUs(string[] gpuIds)
         {
-            lock (lockObject)
+            lock (GpuLockObject)
             {
                 logger.LogDebug("Unlocking GPUs : {GpuIds}", string.Join(", ", gpuIds));
 
@@ -122,7 +86,7 @@ namespace AIMaestroProxy.Services
 
         public void RefreshGpuActivity(string[] gpuIds)
         {
-            lock (lockObject)
+            lock (GpuLockObject)
             {
                 var currentTime = DateTime.UtcNow;
                 foreach (var gpuId in gpuIds)
@@ -172,7 +136,7 @@ namespace AIMaestroProxy.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                lock (lockObject)
+                lock (GpuLockObject)
                 {
                     foreach (var modelAssignment in modelAssignments)
                     {
@@ -226,7 +190,6 @@ namespace AIMaestroProxy.Services
         {
             if (disposing)
             {
-                _timer?.Dispose();
                 gpusFreedEvent.Dispose();
             }
         }

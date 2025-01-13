@@ -5,6 +5,8 @@ namespace AIMaestroProxy.Interfaces
 {
     public interface IGpuManagerService : IDisposable
     {
+        object GpuLockObject { get; }
+
         /// <summary>
         /// Gets an available model assignment based on output type and model name. Any returned ModelAssignments have the gpu reserved for you.
         /// </summary>

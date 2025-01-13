@@ -41,8 +41,6 @@ namespace AIMaestroProxy.Services
             var serializedData = db.StringGet(GetRedisKey(CacheCategory.GpuStatus, key));
             if (serializedData.IsNullOrEmpty)
                 return default;
-
-            _logger.LogInformation("gpustat " + serializedData);
             try
             {
                 return JsonSerializer.Deserialize<GpuStatus>(serializedData!);
@@ -214,6 +212,7 @@ namespace AIMaestroProxy.Services
 
         public void SetCachedGpuStatus(string key, string data, TimeSpan? expiry = null)
         {
+            _logger.LogInformation($"about to bust with {GetRedisKey(CacheCategory.GpuStatus, key)} for a key and data '{data}'");
             var db = _redis.GetDatabase();
             db.StringSet(GetRedisKey(CacheCategory.GpuStatus, key), data, expiry);
         }

@@ -1,6 +1,6 @@
-using AIMaestroProxy.Controllers;
 using AIMaestroProxy.Extensions;
 using AIMaestroProxy.Health;
+using AIMaestroProxy.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,33 +13,21 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
 
+builder.WebHost.UseSentry();
+
 // Register services
 builder.Services.AddServices(builder.Configuration);
-
+builder.Services.AddHostedService<GpuReleaseService>(); // runs in the background to release gpus w/o activity
+builder.Services.AddControllers();
 builder.Services.AddHealthChecks()
     .AddCheck<GpuHealthCheck>("gpu_health");
 
 // Build the application
 var app = builder.Build();
+if (app.Environment.IsDevelopment()) app.UseDeveloperExceptionPage();
 
 // Use logging and other middlewares
 app.UseLogging();
-app.UseWebSockets();
-
-// Map routes
-app.Map("/ws", async context =>
-{
-    if (context.WebSockets.IsWebSocketRequest)
-    {
-        var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-        var webSocketHandler = context.RequestServices.GetRequiredService<WebSocketHandler>();
-        await webSocketHandler.HandleWebSocketAsync(webSocket);
-    }
-    else
-    {
-        context.Response.StatusCode = 400;
-    }
-});
 app.MapHealthChecks("/health");
 app.MapControllers();
 
