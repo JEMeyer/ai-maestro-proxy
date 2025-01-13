@@ -18,7 +18,6 @@ namespace AIMaestroProxy.Services
             if (serializedData.IsNullOrEmpty)
                 return [];
 
-            _logger.LogInformation("asign " + serializedData);
             try
             {
                 return JsonSerializer.Deserialize<ModelAssignment[]>(serializedData!) ?? [];

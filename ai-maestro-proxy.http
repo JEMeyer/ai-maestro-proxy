@@ -41,7 +41,7 @@ POST {{proxyHost}}/api/chat
 Content-Type: application/json
 
 {
-  "model": "codestral",
+  "model": "qwq",
   "prompt": "Why is the sky blue?",
   "stream": false
 }
@@ -60,7 +60,7 @@ POST {{proxyHost}}/api/generate
 Content-Type: application/json
 
 {
-  "model": "codestral",
+  "model": "qwq",
   "prompt": "Why is the sky blue?"
 }
 
