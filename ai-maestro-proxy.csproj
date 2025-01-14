@@ -8,9 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Sentry" Version="5.0.0" />
-    <PackageReference Include="Sentry.AspNetCore" Version="5.0.0" />
-    <PackageReference Include="Sentry.Profiling" Version="5.0.0" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <PackageReference Include="Sentry.AspNetCore" Version="3.34.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.7.33" />
     <PackageReference Include="MySql.Data" Version="8.4.0" />
     <PackageReference Include="Dapper" Version="2.1.35" />

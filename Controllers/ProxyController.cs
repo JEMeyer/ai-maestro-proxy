@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using AIMaestroProxy.Services;
 using AIMaestroProxy.Models;
-using System.Text;
 using System.Text.RegularExpressions;
 using static AIMaestroProxy.Models.PathCategories;
 using AIMaestroProxy.Interfaces;
+using Sentry;
 
 namespace AIMaestroProxy.Controllers
 {
@@ -14,7 +14,8 @@ namespace AIMaestroProxy.Controllers
         IGpuManagerService gpuManagerService,
         DataService dataService,
         ProxiedRequestService proxiedRequestService,
-        ILogger<ProxyController> logger
+        ILogger<ProxyController> logger,
+        IHub sentryHub
     ) : ControllerBase
     {
         [GeneratedRegex("model\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase)]
@@ -50,6 +51,7 @@ namespace AIMaestroProxy.Controllers
         private async Task<IActionResult> HandleRequest(HttpMethod method, string path)
         {
             logger.LogInformation("Handling request: {Method} {Path}", method, path);
+            var childSpan = sentryHub.GetSpan()?.StartChild("handle-proxy-result");
 
             // Initialize variables
             ModelAssignment? modelAssignment = null;
@@ -151,8 +153,9 @@ namespace AIMaestroProxy.Controllers
                         {
                             await (refreshTask ?? Task.CompletedTask);
                         }
-                        catch (TaskCanceledException)
+                        catch (TaskCanceledException e)
                         {
+                            childSpan?.Finish(e);
                             // normal upon cancellation
                         }
                     }
@@ -165,6 +168,7 @@ namespace AIMaestroProxy.Controllers
                 {
                     HttpContext.Response.StatusCode = 499; // Client Closed Request
                 }
+                childSpan?.Finish(oce);
                 return new EmptyResult();
             }
             catch (Exception ex)
@@ -174,10 +178,13 @@ namespace AIMaestroProxy.Controllers
                 {
                     return StatusCode(500, "Internal server error.");
                 }
+                childSpan?.Finish(ex);
                 return new EmptyResult();
             }
             finally
             {
+                childSpan?.Finish(SpanStatus.Ok);
+
                 // Ensure GPU resources are released
                 if (modelAssignment != null && !string.IsNullOrEmpty(modelAssignment.GpuIds))
                 {

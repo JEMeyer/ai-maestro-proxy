@@ -1,6 +1,7 @@
 using AIMaestroProxy.Extensions;
 using AIMaestroProxy.Health;
 using AIMaestroProxy.Services;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,7 +29,13 @@ if (app.Environment.IsDevelopment()) app.UseDeveloperExceptionPage();
 
 // Use logging and other middlewares
 app.UseLogging();
+app.UseHttpMetrics(options =>
+{
+    // This will preserve only the first digit of the status code.
+    // For example: 200, 201, 203 -> 2xx
+    options.ReduceStatusCodeCardinality();
+});
 app.MapHealthChecks("/health");
 app.MapControllers();
-
+app.MapMetrics();
 app.Run();
