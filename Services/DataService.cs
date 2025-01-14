@@ -93,7 +93,7 @@ namespace AIMaestroProxy.Services
         public void SetGpuStatus(string gpuId, GpuStatus status)
         {
             string serializedData = JsonSerializer.Serialize(status);
-            _cacheService.SetCachedGpuStatus(gpuId, serializedData, TimeSpan.FromMinutes(10));
+            _cacheService.SetCachedGpuStatus(gpuId, serializedData);
         }
 
         /// <summary>
