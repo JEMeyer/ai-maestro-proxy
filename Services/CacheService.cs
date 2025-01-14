@@ -212,7 +212,6 @@ namespace AIMaestroProxy.Services
 
         public void SetCachedGpuStatus(string key, string data, TimeSpan? expiry = null)
         {
-            _logger.LogInformation($"about to bust with {GetRedisKey(CacheCategory.GpuStatus, key)} for a key and data '{data}'");
             var db = _redis.GetDatabase();
             db.StringSet(GetRedisKey(CacheCategory.GpuStatus, key), data, expiry);
         }
