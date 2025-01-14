@@ -2,13 +2,54 @@
 ### GPU ENDPOINTS
 ###
 
-### Reserve a model
-POST {{proxyHost}}/gpu/reserve/codestral
+POST {{proxyHost}}/gpu/reserve
 Content-Type: application/json
 
-### Release a model
-POST {{proxyHost}}/gpu/release/2
+{
+  "outputType": "text",
+  "model": "qwq"
+}
+###
+
+POST {{proxyHost}}/gpu/reserve
 Content-Type: application/json
+
+{
+  "outputType": "images",
+  "model": "animagine-xl-3.1",
+}
+###
+
+POST {{proxyHost}}/gpu/ping
+Content-Type: application/json
+
+{
+  "gpuIds": ["1"]
+}
+
+###
+
+POST {{proxyHost}}/gpu/release
+Content-Type: application/json
+
+{
+  "gpuIds": ["1"]
+}
+###
+
+
+POST {{proxyHost}}/gpu/ping/
+Content-Type: application/json
+
+{
+  "gpuIds": ["1"]
+}
+
+###
+### Healthcheck (redis + db
+GET {{proxyHost}}/
+Content-Type: application/json
+
 
 ###
 ### DIFFUSION ENDPOINTS
@@ -20,8 +61,9 @@ POST {{proxyHost}}/txt2img
 Content-Type: application/json
 
 {
-  "model": "sdxl-turbo",
-  "prompt": "A photo of a cat in a hat, digital art"
+  "model": "animagine-xl-3.1",
+  "prompt": "A photo of a cat in a hat, digital art",
+  "num_inference_steps": 10
 }
 
 ### Generate an image with sd-turbo
@@ -42,7 +84,7 @@ POST {{proxyHost}}/api/chat
 Content-Type: application/json
 
 {
-  "model": "codestral",
+  "model": "qwq",
   "prompt": "Why is the sky blue?",
   "stream": false
 }
@@ -61,7 +103,7 @@ POST {{proxyHost}}/api/generate
 Content-Type: application/json
 
 {
-  "model": "codestral",
+  "model": "qwq",
   "prompt": "Why is the sky blue?"
 }
 
@@ -112,7 +154,7 @@ POST {{proxyHost}}/api/show
 Content-Type: application/json
 
 {
-  "name": "codestral"
+  "name": "phi-3"
 }
 
 ###

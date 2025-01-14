@@ -1,67 +1,41 @@
-using AIMaestroProxy.Logging;
-using AIMaestroProxy.Middleware;
-using AIMaestroProxy.Models;
+using AIMaestroProxy.Extensions;
+using AIMaestroProxy.Health;
 using AIMaestroProxy.Services;
-using Microsoft.Extensions.Logging.Console;
-using MySql.Data.MySqlClient;
-using StackExchange.Redis;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
 Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
 
-// Load Config values
+// Load configuration
 builder.Configuration
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
     .AddEnvironmentVariables();
 
-// Configure services
-builder.Services.AddLogging(loggingBuilder =>
-{
-    loggingBuilder.ClearProviders();
-    loggingBuilder.AddConfiguration(builder.Configuration.GetSection("Logging"));
-    loggingBuilder.AddConsole(options => options.FormatterName = "custom");
-    loggingBuilder.AddConsoleFormatter<CustomConsoleFormatter, ConsoleFormatterOptions>();
-});
+builder.WebHost.UseSentry();
 
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
-ArgumentException.ThrowIfNullOrWhiteSpace(redisConnectionString);
-
-// Add Singleton services for the database/redis clients
-builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
-builder.Services.AddSingleton<MySqlConnection>(_ => new(builder.Configuration.GetConnectionString("MariaDb")));
-
-// Add Singleton services for Services
-builder.Services.AddSingleton<CacheService>();
-builder.Services.AddSingleton<DatabaseService>();
-builder.Services.AddSingleton<DataService>();
-builder.Services.AddSingleton<GpuManagerService>();
+// Register services
+builder.Services.AddServices(builder.Configuration);
+builder.Services.AddHostedService<GpuReleaseService>(); // runs in the background to release gpus w/o activity
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks()
+    .AddCheck<GpuHealthCheck>("gpu_health");
 
-// Load up endpoints from config. Dynamic for idk why, someone can use this with any backend.
-builder.Services.Configure<PathCategories>(builder.Configuration.GetSection("PathCategories"));
-
-// Add transient HttpClient service for proxied requests
-builder.Services.AddHttpClient<ProxiedRequestService>();
-
+// Build the application
 var app = builder.Build();
+if (app.Environment.IsDevelopment()) app.UseDeveloperExceptionPage();
 
-// Middleware to handle errors globally
-app.UseMiddleware<ErrorHandlingMiddleware>();
-
-// Middleware to log request trace ID and handle stopwatch
-app.UseMiddleware<TraceIdLoggingMiddleware>();
-app.UseMiddleware<StopwatchMiddleware>();
-
-// Middleware to handle not found responses
-app.UseMiddleware<NotFoundLoggingMiddleware>();
-
-// Define the default route
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{*path}",
-    defaults: new { controller = "Proxy", action = "HandleRequest" });
-
+// Use logging and other middlewares
+app.UseLogging();
+app.UseHttpMetrics(options =>
+{
+    // This will preserve only the first digit of the status code.
+    // For example: 200, 201, 203 -> 2xx
+    options.ReduceStatusCodeCardinality();
+});
+app.MapHealthChecks("/health");
+app.MapControllers();
+app.MapMetrics();
 app.Run();

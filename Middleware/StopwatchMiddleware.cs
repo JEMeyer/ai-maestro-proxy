@@ -8,11 +8,17 @@ namespace AIMaestroProxy.Middleware
         {
             var stopwatch = Stopwatch.StartNew();
 
-            await next(context);
+            // Create a new logging scope with the current request's path
+            using (logger.BeginScope(new Dictionary<string, object>
+            {
+                ["RequestPath"] = context.Request.Path.Value ?? "/"
+            }))
+            {
+                await next(context);
 
-            stopwatch.Stop();
-
-            logger.LogDebug("##COLOR##Total request time: {milliseconds} ms.", stopwatch.ElapsedMilliseconds);
+                stopwatch.Stop();
+                logger.LogDebug("##COLOR## Total request time: {milliseconds} ms.", stopwatch.ElapsedMilliseconds);
+            }
         }
     }
 }

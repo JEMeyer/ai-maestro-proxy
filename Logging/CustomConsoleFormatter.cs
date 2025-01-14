@@ -19,7 +19,6 @@ namespace AIMaestroProxy.Logging
             var logLevelString = GetLogLevelString(logLevel);
             var logLevelColor = GetLogLevelColor(logLevel);
             var traceIdentifierColor = "\u001b[36m"; // Cyan
-            var requestPathColor = "\u001b[97m"; // Bright White
 
             textWriter.Write(logLevelColor);
             textWriter.Write(logLevelString);
@@ -27,27 +26,28 @@ namespace AIMaestroProxy.Logging
             textWriter.Write("\u001b[0m"); // Reset color
 
             var traceIdentifier = "N/A";
-            var requestPath = "N/A";
 
+            // Modified scope handling
+            var scopeValues = new Dictionary<string, string>();
             scopeProvider?.ForEachScope((scope, state) =>
+            {
+                if (scope is IEnumerable<KeyValuePair<string, object>> dictionary)
                 {
-                    if (scope is IEnumerable<KeyValuePair<string, object>> dictionary)
+                    foreach (var item in dictionary)
                     {
-                        foreach (var item in dictionary)
-                        {
-                            if (item.Key == "TraceIdentifier")
-                            {
-                                traceIdentifier = item.Value?.ToString() ?? "N/A";
-                            }
-                            else if (item.Key == "RequestPath")
-                            {
-                                requestPath = item.Value?.ToString() ?? "N/A";
-                            }
-                        }
+                        // Always update with the latest value
+                        scopeValues[item.Key] = item.Value?.ToString() ?? "N/A";
                     }
-                }, logEntry);
+                }
+            }, logEntry);
 
-            if (traceIdentifier == "N/A" && requestPath == "N/A")
+            // Get the final values after processing all scopes
+            if (scopeValues.TryGetValue("TraceIdentifier", out var trace))
+            {
+                traceIdentifier = trace;
+            }
+
+            if (traceIdentifier == "N/A")
             {
                 textWriter.Write(traceIdentifierColor);
                 textWriter.Write("[GLOBAL] ");
@@ -57,10 +57,6 @@ namespace AIMaestroProxy.Logging
             {
                 textWriter.Write(traceIdentifierColor);
                 textWriter.Write($"TraceIdentifier: {traceIdentifier} ");
-                textWriter.Write("\u001b[0m"); // Reset color
-
-                textWriter.Write(requestPathColor);
-                textWriter.Write($"RequestPath: {requestPath} ");
                 textWriter.Write("\u001b[0m"); // Reset color
             }
 

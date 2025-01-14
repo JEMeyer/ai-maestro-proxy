@@ -1,39 +1,68 @@
 namespace AIMaestroProxy.Models
 {
-    public class PathCategories
+    public static class PathCategories
     {
         /// <summary>
-        /// Standard 'compute' requests that actually run the AI
+        /// The different types of servers/endpoints
         /// </summary>
-        public required List<string> GpuBoundPaths { get; set; }
-        /// <summary>
-        /// Requests that, to be 'accurate', should loop over all servers of a given type.
-        /// </summary>
-        public required List<string> LoopingServerPaths { get; set; }
-
-        /// <summary>
-        /// Whisper not listed due to laziness and also doens't need it since it's all compute
-        /// </summary>
-        public enum PathFamily
+        public enum OutputType
         {
-            Ollama,
-            Coqui,
-            Diffusion,
+            Text,
+            Speech,
+            Images,
             Unknown
         }
 
         /// <summary>
-        /// Used when we can use any instance or the looping instances so we know which type of container to request.
+        /// Used when we can use any instance so we know which type of container to request.
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
-        public PathFamily GetNonComputePathFamily(string path)
+        public static OutputType GetOutputTypeFromPath(string path)
         {
-            if (path == "" || path.StartsWith("api/")) return PathFamily.Ollama;
-            if (path.StartsWith("languages") || path.StartsWith("studio_speakers")) return PathFamily.Coqui;
-            if (path.StartsWith("upload")) return PathFamily.Diffusion;
+            if (
+                path == "" ||
+                path.StartsWith("api/") ||
+                path.StartsWith("v1/models"))
+                return OutputType.Text;
 
-            return PathFamily.Unknown;
+            if (path.StartsWith("audio/")) return OutputType.Speech;
+
+            if (
+                path.StartsWith("txt2img") ||
+                path.StartsWith("img2img") ||
+                path.StartsWith("v1/images"))
+                return OutputType.Images;
+
+            return OutputType.Unknown;
+        }
+
+        public static OutputType GetOutputTypeFromString(string sType)
+        {
+            return sType switch
+            {
+                "text" => OutputType.Text,
+                "speech" => OutputType.Speech,
+                "images" => OutputType.Images,
+                _ => OutputType.Unknown,
+            };
+        }
+
+        /// <summary>
+        /// Used to get nice looking strings to use for redis key and db
+        /// </summary>
+        /// <param name="OutputType"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        public static string ToStorageName(this OutputType OutputType)
+        {
+            return OutputType switch
+            {
+                OutputType.Images => "diffusors",
+                OutputType.Speech => "speech_models",
+                OutputType.Text => "llms",
+                _ => throw new ArgumentException("Invalid path family.")
+            };
         }
     }
 }

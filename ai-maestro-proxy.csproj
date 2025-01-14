@@ -8,9 +8,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <PackageReference Include="Sentry.AspNetCore" Version="3.34.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.7.33" />
     <PackageReference Include="MySql.Data" Version="8.4.0" />
     <PackageReference Include="Dapper" Version="2.1.35" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ExcludeFromPackageFolders Include="tmp">
+        <FromTarget>AIMaestroProxy</FromTarget>
+    </ExcludeFromPackageFolders>
+  </ItemGroup>
+
 </Project>
+

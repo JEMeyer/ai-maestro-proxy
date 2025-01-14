@@ -1,75 +1,225 @@
 using System.Text.Json;
-using AIMaestroProxy.Enums;
-using AIMaestroProxy.Extensions;
+using AIMaestroProxy.Interfaces;
+using AIMaestroProxy.Models;
 using StackExchange.Redis;
+using static AIMaestroProxy.Models.Cache;
 
 namespace AIMaestroProxy.Services
 {
     public class CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
     {
-        public void CacheData(CacheCategory category, string identifier, string data)
+        private readonly IConnectionMultiplexer _redis = redis;
+        private readonly ILogger<CacheService> _logger = logger;
+
+        public ModelAssignment[] GetCachedModelAssignments(string key)
         {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+            var db = _redis.GetDatabase();
+            var serializedData = db.StringGet(GetRedisKey(CacheCategory.ModelAssignments, key));
+            if (serializedData.IsNullOrEmpty)
+                return [];
 
-            db.StringSet(cacheKey, data);
-        }
-
-        public async Task CacheDataAsync(
-            CacheCategory category, string identifier, string data)
-        {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
-
-            await db.StringSetAsync(cacheKey, data);
-        }
-
-        public T? GetCachedData<T>(CacheCategory category, string identifier) where T : class
-        {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
-
-            var cachedData = db.StringGet(cacheKey);
-            if (cachedData.HasValue)
+            try
             {
+                return JsonSerializer.Deserialize<ModelAssignment[]>(serializedData!) ?? [];
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize cache data for key: {Key}", key);
+                return [];
+            }
+        }
+
+        public async Task SetCachedModelAssignmentsAsync(string key, string data, TimeSpan? expiry = null)
+        {
+            var db = _redis.GetDatabase();
+            await db.StringSetAsync(GetRedisKey(CacheCategory.ModelAssignments, key), data, expiry);
+        }
+
+        public GpuStatus? GetCachedGpuStatus(string key)
+        {
+            var db = _redis.GetDatabase();
+            var serializedData = db.StringGet(GetRedisKey(CacheCategory.GpuStatus, key));
+            if (serializedData.IsNullOrEmpty)
+                return default;
+            try
+            {
+                return JsonSerializer.Deserialize<GpuStatus>(serializedData!);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Failed to deserialize cache data for key: {Key}", key);
+                return default;
+            }
+        }
+
+        public List<GpuStatus> GetAllCachedGpuStatuses()
+        {
+            var db = _redis.GetDatabase();
+            var pattern = $"{CacheCategory.GpuStatus.ToFriendlyString()}:*";
+            var keys = new List<RedisKey>();
+            long cursor = 0;
+            do
+            {
+                var scanResult = db.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", "100");
+                if (scanResult.IsNull || scanResult.Resp2Type != ResultType.Array)
+                {
+                    _logger.LogError("Unexpected SCAN response format");
+                    break;
+                }
+
+                RedisResult[]? innerResult;
                 try
                 {
-                    var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
-                    return data;
+                    innerResult = (RedisResult[])scanResult;
                 }
-                catch (JsonException ex)
+                catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
-                    db.KeyDelete(cacheKey);
-                    return default;
+                    _logger.LogError(ex, "Failed to cast scan result to array");
+                    break;
                 }
-            }
-            return default;
-        }
 
+                if (innerResult == null || innerResult.Length < 2 || innerResult[0].IsNull)
+                {
+                    _logger.LogError("Invalid SCAN response structure");
+                    break;
+                }
 
-        public async Task<T?> GetCachedDataAsync<T>(CacheCategory category, string identifier) where T : class
-        {
-            var db = redis.GetDatabase();
-            var cacheKey = $"{category.ToCacheKey()}:{identifier}";
+                var cursorStr = innerResult[0].ToString();
+                if (string.IsNullOrEmpty(cursorStr) || !long.TryParse(cursorStr, out cursor))
+                {
+                    _logger.LogError("Invalid cursor value in SCAN response");
+                    break;
+                }
 
-            var cachedData = await db.StringGetAsync(cacheKey);
-            if (cachedData.HasValue)
-            {
+                RedisResult[]? keysArray;
                 try
                 {
-                    var data = JsonSerializer.Deserialize<T>(cachedData.ToString());
-                    return data;
+                    keysArray = (RedisResult[])innerResult[1];
                 }
-                catch (JsonException ex)
+                catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error deserializing data from cache - removing item from cache.");
-                    await db.KeyDeleteAsync(cacheKey);
-                    return default;
+                    _logger.LogError(ex, "Failed to cast keys result to array");
+                    break;
+                }
+
+                if (keysArray != null)
+                {
+                    var resultKeys = keysArray
+                        .Where(x => x != null && !x.IsNull)
+                        .Select(x => (RedisKey)x.ToString());
+                    keys.AddRange(resultKeys);
+                }
+            } while (cursor != 0);
+
+            if (keys.Count == 0)
+            {
+                _logger.LogDebug("No GPU status keys currently in Redis");
+                return [];
+            }
+
+            var gpuStatuses = new List<GpuStatus>();
+            var values = db.StringGet(keys.ToArray());
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (!values[i].IsNullOrEmpty)
+                {
+                    try
+                    {
+                        var status = JsonSerializer.Deserialize<GpuStatus>(values[i]!);
+                        if (status != null)
+                        {
+                            gpuStatuses.Add(status);
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        _logger.LogError(ex, "Failed to deserialize cache data for key: {Key}", keys[i]);
+                    }
                 }
             }
 
-            return default;
+            return gpuStatuses;
+        }
+
+        public long RemoveAllCachedGpuStatuses(CacheCategory cacheCategory)
+        {
+            var db = _redis.GetDatabase();
+            var pattern = $"{cacheCategory.ToFriendlyString()}:*";
+            var keys = new List<RedisKey>();
+            long cursor = 0;
+            do
+            {
+                var scanResult = db.Execute("SCAN", cursor.ToString(), "MATCH", pattern, "COUNT", "100");
+                if (scanResult.IsNull || scanResult.Resp2Type != ResultType.Array)
+                {
+                    _logger.LogError("Unexpected SCAN response format");
+                    break;
+                }
+
+                RedisResult[]? innerResult;
+                try
+                {
+                    innerResult = (RedisResult[])scanResult;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to cast scan result to array");
+                    break;
+                }
+
+                if (innerResult == null || innerResult.Length < 2 || innerResult[0].IsNull)
+                {
+                    _logger.LogError("Invalid SCAN response structure");
+                    break;
+                }
+
+                var cursorStr = innerResult[0].ToString();
+                if (string.IsNullOrEmpty(cursorStr) || !long.TryParse(cursorStr, out cursor))
+                {
+                    _logger.LogError("Invalid cursor value in SCAN response");
+                    break;
+                }
+
+                RedisResult[]? keysArray;
+                try
+                {
+                    keysArray = (RedisResult[])innerResult[1];
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to cast keys result to array");
+                    break;
+                }
+
+                if (keysArray != null)
+                {
+                    var resultKeys = keysArray
+                        .Where(x => x != null && !x.IsNull)
+                        .Select(x => (RedisKey)x.ToString());
+                    keys.AddRange(resultKeys);
+                }
+            } while (cursor != 0);
+
+            if (keys.Count == 0)
+            {
+                _logger.LogDebug("No GPU status keys found to remove");
+                return 0;
+            }
+
+            return db.KeyDelete([.. keys]);
+        }
+
+        public void SetCachedGpuStatus(string key, string data, TimeSpan? expiry = null)
+        {
+            _logger.LogInformation($"about to bust with {GetRedisKey(CacheCategory.GpuStatus, key)} for a key and data '{data}'");
+            var db = _redis.GetDatabase();
+            db.StringSet(GetRedisKey(CacheCategory.GpuStatus, key), data, expiry);
+        }
+
+        private static string GetRedisKey(CacheCategory category, string key)
+        {
+            return $"{category.ToFriendlyString()}:{key}";
         }
     }
 }

@@ -4,11 +4,10 @@ namespace AIMaestroProxy.Middleware
     {
         public async Task InvokeAsync(HttpContext context)
         {
-            var traceIdentifier = context.TraceIdentifier;
-
             using (logger.BeginScope(new Dictionary<string, object>
             {
-                ["TraceIdentifier"] = traceIdentifier
+                ["TraceIdentifier"] = context.TraceIdentifier,
+                ["RequestPath"] = context.Request.Path.Value ?? "/"
             }))
             {
                 await next(context);

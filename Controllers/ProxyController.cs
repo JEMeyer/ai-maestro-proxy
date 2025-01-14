@@ -1,58 +1,201 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using AIMaestroProxy.Services;
 using AIMaestroProxy.Models;
+using System.Text.RegularExpressions;
+using static AIMaestroProxy.Models.PathCategories;
+using AIMaestroProxy.Interfaces;
+using Sentry;
 
 namespace AIMaestroProxy.Controllers
 {
     [ApiController]
-    public partial class ProxyController(GpuManagerService gpuManagerService,
-                               IOptions<PathCategories> pathCategories,
-                               ProxiedRequestService proxiedRequestService,
-                               DataService dataService,
-                               ILogger<ProxyController> logger) : ControllerBase
+    [Route("{*path}")] // Route all paths
+    public partial class ProxyController(
+        IGpuManagerService gpuManagerService,
+        DataService dataService,
+        ProxiedRequestService proxiedRequestService,
+        ILogger<ProxyController> logger,
+        IHub sentryHub
+    ) : ControllerBase
     {
-        [HttpGet("{*path}")]
+        [GeneratedRegex("model\"\\s*:\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase)]
+        private static partial Regex ModelRegex();
+
+
+        [HttpGet]
         public async Task<IActionResult> Get([FromRoute] string? path)
         {
             return await HandleRequest(HttpMethod.Get, path ?? string.Empty);
         }
 
-
-        [HttpHead("{*path}")]
-        public async Task<IActionResult> Head([FromRoute] string? path)
+        [HttpPost]
+        public async Task<IActionResult> Post([FromRoute] string? path)
         {
-            return await HandleRequest(HttpMethod.Head, path ?? string.Empty);
+            return await HandleRequest(HttpMethod.Post, path ?? string.Empty);
         }
 
-        [HttpPost("{*path}")]
-        public async Task<IActionResult> Post([FromRoute] string path)
+        [HttpPut]
+        public async Task<IActionResult> Put([FromRoute] string? path)
         {
-            return await HandleRequest(HttpMethod.Post, path);
+            return await HandleRequest(HttpMethod.Put, path ?? string.Empty);
         }
 
-        [HttpPut("{*path}")]
-        public async Task<IActionResult> Put([FromRoute] string path)
+        [HttpDelete]
+        public async Task<IActionResult> Delete([FromRoute] string? path)
         {
-            return await HandleRequest(HttpMethod.Put, path);
+            return await HandleRequest(HttpMethod.Delete, path ?? string.Empty);
         }
 
-        [HttpDelete("{*path}")]
-        public async Task<IActionResult> Delete([FromRoute] string path)
+        // Centralized request handling
+        [NonAction]
+        private async Task<IActionResult> HandleRequest(HttpMethod method, string path)
         {
-            return await HandleRequest(HttpMethod.Delete, path);
-        }
+            logger.LogInformation("Handling request: {Method} {Path}", method, path);
+            var childSpan = sentryHub.GetSpan()?.StartChild("handle-proxy-result");
 
-        [HttpOptions("{*path}")]
-        public async Task<IActionResult> Options([FromRoute] string path)
-        {
-            return await HandleRequest(HttpMethod.Head, path);
-        }
+            // Initialize variables
+            ModelAssignment? modelAssignment = null;
+            string? modelName = null;
+            string? bodyContent = null;
 
-        [HttpPatch("{*path}")]
-        public async Task<IActionResult> Patch([FromRoute] string path)
-        {
-            return await HandleRequest(HttpMethod.Head, path);
+            try
+            {
+                // If it's a POST request, read the body content first
+                if (HttpContext.Request.Method == HttpMethod.Post.Method)
+                {
+                    using var reader = new StreamReader(HttpContext.Request.Body);
+                    bodyContent = await reader.ReadToEndAsync();
+
+                    // If this path requires GPU, extract model name from the body we just read
+                    if (GpuPaths.ComputeRequired.Contains(path))
+                    {
+                        var match = ModelRegex().Match(bodyContent);
+                        if (match.Success && match.Groups.Count > 1)
+                        {
+                            modelName = match.Groups[1].Value;
+                        }
+
+                        if (string.IsNullOrEmpty(modelName))
+                        {
+                            logger.LogError("Model name not found in the request body.");
+                            return BadRequest("Model name is required.");
+                        }
+                        else if (modelName.EndsWith(":latest", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Remove ":latest" from the end of the model name - maestrodb doesn't use it
+                            modelName = modelName[..^7];
+                        }
+                    }
+                }
+
+                // Determine if the path requires GPU resources
+                if (GpuPaths.ComputeRequired.Contains(path))
+                {
+                    logger.LogDebug("GPU-bound request for path: {Path}", path);
+
+                    // We already have modelName from the body if this was a POST
+                    if (string.IsNullOrEmpty(modelName))
+                    {
+                        logger.LogError("Model name not found in the request.");
+                        return BadRequest("Model name is required.");
+                    }
+
+                    // Assign a GPU container based on the model
+                    modelAssignment = await gpuManagerService.GetAvailableModelAssignmentAsync(GetOutputTypeFromPath(path), modelName, HttpContext.RequestAborted);
+                    if (modelAssignment == null)
+                    {
+                        logger.LogError("No available GPU assignment for model: {ModelName}", modelName);
+                        return NotFound("No available model assignment found.");
+                    }
+                }
+                else
+                {
+                    // Non-GPU-bound paths handling (e.g., listing models, version info)
+                    logger.LogDebug("Handling non-GPU-bound path: {Path}", path);
+                    var modelAssignments = await dataService.GetModelAssignmentsAsync(GetOutputTypeFromPath(path));
+                    if (!modelAssignments.Any())
+                    {
+                        return NotFound("No available containers found.");
+                    }
+
+                    var selectedContainer = modelAssignments.First();
+                    modelAssignment = new ModelAssignment
+                    {
+                        Name = selectedContainer.Name,
+                        Ip = selectedContainer.Ip,
+                        Port = selectedContainer.Port,
+                        GpuIds = string.Empty,
+                    };
+                }
+
+                // If we do have GPU IDs, start a keep-alive loop
+                CancellationTokenSource? refreshCts = null;
+                Task? refreshTask = null;
+
+                if (!string.IsNullOrEmpty(modelAssignment.GpuIds))
+                {
+                    refreshCts = new CancellationTokenSource();
+                    refreshTask = gpuManagerService.KeepGpuRefreshAliveAsync(modelAssignment.GpuIds.Split(","), refreshCts.Token);
+                }
+
+                try
+                {
+                    // Route the actual request to the proxied service
+                    await proxiedRequestService.RouteRequestAsync(HttpContext, modelAssignment, method, bodyContent);
+                }
+                finally
+                {
+                    // Stop refreshing once this request is done
+                    if (refreshCts != null)
+                    {
+                        refreshCts.Cancel();
+                        try
+                        {
+                            await (refreshTask ?? Task.CompletedTask);
+                        }
+                        catch (TaskCanceledException e)
+                        {
+                            childSpan?.Finish(e);
+                            // normal upon cancellation
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException oce)
+            {
+                logger.LogWarning(oce, "Request was canceled by the client: {Path}", path);
+                if (!HttpContext.Response.HasStarted)
+                {
+                    HttpContext.Response.StatusCode = 499; // Client Closed Request
+                }
+                childSpan?.Finish(oce);
+                return new EmptyResult();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error while handling request: {Path}", path);
+                if (!HttpContext.Response.HasStarted)
+                {
+                    return StatusCode(500, "Internal server error.");
+                }
+                childSpan?.Finish(ex);
+                return new EmptyResult();
+            }
+            finally
+            {
+                childSpan?.Finish(SpanStatus.Ok);
+
+                // Ensure GPU resources are released
+                if (modelAssignment != null && !string.IsNullOrEmpty(modelAssignment.GpuIds))
+                {
+                    gpuManagerService.UnlockGPUs(modelAssignment.GpuIds
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries));
+                    logger.LogDebug("Unlocked GPUs for model: {ModelName}", modelName);
+                }
+            }
+
+            // The response is already handled by RouteRequestAsync
+            return new EmptyResult();
         }
     }
 }
